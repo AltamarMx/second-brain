@@ -242,3 +242,24 @@ def test_cli_process_pending_and_search(lib, paper, monkeypatch):
     result = runner.invoke(cli.app, [*home, "list", "--study", "experimental", "--json"])
     assert len(json.loads(result.output)) == 1
     assert "Nada que procesar" in runner.invoke(cli.app, [*home, "process", "--pending"]).output
+
+
+def test_ingest_all_processes_pending_checks_and_commits(lib, paper, monkeypatch):
+    import subprocess
+
+    from second_brain.scaffold import init_machine
+
+    init_machine(lib.home, "test-machine")
+    for var in ("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"):
+        monkeypatch.setenv(var, "test")
+    for var in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
+        monkeypatch.setenv(var, "test@example.org")
+    subprocess.run(["git", "config", "core.hooksPath", "/dev/null"], cwd=lib.home, check=True)
+    monkeypatch.setattr(cli, "get_backend", lambda *args, **kwargs: FakeBackend())
+    result = CliRunner().invoke(cli.app, ["--home", str(lib.home), "ingest", "--all"])
+    assert result.exit_code == 0, result.output
+    assert lib.read_paper(paper).meta.status == "processed"
+    log = subprocess.run(["git", "log", "--oneline"], cwd=lib.home, capture_output=True, text=True)
+    assert "sb ingest --all" in log.stdout
+    again = CliRunner().invoke(cli.app, ["--home", str(lib.home), "ingest", "--all"])
+    assert "Nada pendiente" in again.output and "Sin cambios" in again.output

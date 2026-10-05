@@ -31,6 +31,7 @@ uv run sb doctor
 | `sb check [--fast] [--json]` | Valida la biblioteca |
 | `sb status [--json]` | Muestra lo pendiente |
 | `sb ingest [PDFs o DOIs…] [--dois F] [--retry] [--doi D] [--project P] [--dry-run] [--limit N] [--json]` | Ingiere los PDFs de `inbox/`, los PDFs o DOIs indicados, o una lista de DOIs |
+| `sb ingest --all [--push]` | Todo seguido: ingerir `inbox/`, procesar lo pendiente, validar y hacer commit de `library/` (y `git push` con `--push`) |
 | `sb pdf status [--json]` | Artículos que esperan PDF o cuyo PDF no está en esta máquina |
 | `sb pdf get KEY… \| --missing` | Descarga el PDF de artículos registrados |
 | `sb pdf open KEY` | Abre el PDF local o la página del artículo en el navegador |

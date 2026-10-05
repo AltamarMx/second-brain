@@ -412,6 +412,13 @@ def ingest(
     no_process: Annotated[
         bool, typer.Option("--no-process", help="No resumir ni describir figuras ahora.")
     ] = False,
+    all_: Annotated[
+        bool,
+        typer.Option(
+            "--all", help="Todo seguido: ingerir, procesar lo pendiente, validar y hacer commit."
+        ),
+    ] = False,
+    push: Annotated[bool, typer.Option(help="Con --all: además, git push.")] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
 ) -> None:
     """Ingiere PDFs o DOIs: metadatos, descarga, duplicados, texto completo y pdfs/."""
@@ -439,7 +446,13 @@ def ingest(
     if limit:
         paths = paths[:limit]
         wanted = wanted[: max(0, limit - len(paths))]
-    _run_ingest(ingestor, paths, wanted, as_json, dry_run, process=not no_process)
+    if not all_:
+        _run_ingest(ingestor, paths, wanted, as_json, dry_run, process=not no_process)
+        return
+    if dry_run or as_json:
+        console.print("[red]✗[/] --all no se combina con --dry-run ni --json")
+        raise typer.Exit(2)
+    _ingest_all(lib, ingestor, paths, wanted, push)
 
 
 def _read_paper(lib: Library, citekey: str):
@@ -1023,16 +1036,7 @@ def process(
         _reclassify(lib, keys, as_json, backend)
         return
     if pending or stale:
-        dummy = Processor(lib, config, backend=None, machine="")  # type: ignore[arg-type]
-        for doc in lib.iter_papers():
-            if isinstance(doc, InvalidDocument) or doc.meta.citekey in keys:
-                continue
-            if not lib.fulltext_path(doc.meta.citekey).is_file():
-                continue
-            if dummy.needs_summary(doc.meta, doc.body, stale) or (
-                figures and dummy.needs_figures(doc.meta, stale)
-            ):
-                keys.append(doc.meta.citekey)
+        keys += [k for k in _pending_keys(lib, config, stale, figures) if k not in keys]
     for key in keys:
         _read_paper(lib, key)
     if not keys:
@@ -1695,3 +1699,88 @@ def refs(
         console.print("  (ninguno se cita entre sí todavía)")
     if graph.without_data:
         console.print(f"[dim]Sin referencias en Crossref: {', '.join(graph.without_data)}[/]")
+
+
+def _pending_keys(lib: Library, config, stale: bool = False, figures: bool = True) -> list[str]:
+    """Papers with full text whose summary or figures are still missing (or outdated with stale)."""
+    checker = Processor(lib, config, backend=None, machine="")  # type: ignore[arg-type]
+    keys = []
+    for doc in lib.iter_papers():
+        if isinstance(doc, InvalidDocument) or not lib.fulltext_path(doc.meta.citekey).is_file():
+            continue
+        if checker.needs_summary(doc.meta, doc.body, stale) or (
+            figures and checker.needs_figures(doc.meta, stale)
+        ):
+            keys.append(doc.meta.citekey)
+    return keys
+
+
+def _git(home: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=home, capture_output=True, text=True)
+
+
+def _ingest_all(
+    lib: Library, ingestor: Ingestor, paths: list[Path], dois: list[str], push: bool
+) -> None:
+    """sb ingest --all: ingest → process everything pending → check → commit (→ push)."""
+    console.rule("1/4 Ingesta")
+    exit_code = 0
+    try:
+        _run_ingest(ingestor, paths, dois, as_json=False, dry_run=False, process=False)
+    except typer.Exit as exc:  # some PDFs failed: they are in inbox/_errores, keep going
+        exit_code = exc.exit_code or 0
+        if exit_code == 2:
+            raise
+
+    console.rule("2/4 Procesamiento")
+    keys = _pending_keys(lib, load_config(lib.home))
+    if keys:
+        results = _process_keys(lib, keys, quiet=False)
+        if any(r.outcome == "error" for r in results.values()):
+            exit_code = 1
+    else:
+        console.print("Nada pendiente.")
+
+    console.rule("3/4 Validación")
+    report = run_checks(lib.home)
+    for issue in report.issues:
+        mark = "[red]✗[/]" if issue.level == "error" else "[yellow]![/]"
+        console.print(f"{mark} {escape(issue.path)}: {escape(issue.message)}")
+    if not report.ok:
+        console.print(
+            f"[red]✗[/] {len(report.errors)} errores: no hago commit. Corrígelos y repite."
+        )
+        raise typer.Exit(1)
+    console.print(
+        f"[green]✓[/] Biblioteca válida ({report.papers} artículos, {report.projects} proyectos)."
+    )
+
+    console.rule("4/4 Git")
+    if not (lib.home / ".git").exists():
+        console.print("La biblioteca no es un repositorio git: no hay nada que guardar.")
+        raise typer.Exit(exit_code)
+    _git(lib.home, "add", "library")
+    if _git(lib.home, "diff", "--cached", "--quiet").returncode == 0:
+        console.print("Sin cambios que guardar.")
+    else:
+        changed = _git(lib.home, "diff", "--cached", "--name-only").stdout.split()
+        papers = len({Path(p).stem for p in changed if p.startswith("library/papers/")})
+        message = f"ingest/process: {papers} artículos actualizados (sb ingest --all)"
+        committed = _git(lib.home, "commit", "-q", "-m", message)
+        if committed.returncode != 0:
+            console.print(
+                f"[red]✗[/] git commit falló: {escape((committed.stderr or committed.stdout).strip())}"
+            )
+            raise typer.Exit(1)
+        console.print(f"[green]✓[/] Commit: {escape(message)}")
+    if push:
+        pushed = _git(lib.home, "push", "-q")
+        if pushed.returncode != 0:
+            console.print(f"[red]✗[/] git push falló: {escape(pushed.stderr.strip())}")
+            raise typer.Exit(1)
+        console.print("[green]✓[/] Subido a GitHub.")
+    else:
+        console.print(
+            "[dim]Para subirlo a GitHub: git push (o la próxima vez, sb ingest --all --push).[/]"
+        )
+    raise typer.Exit(exit_code)
