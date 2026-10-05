@@ -1,6 +1,6 @@
 # PLAN — Second Brain de artículos científicos
 
-> **Estado:** v0.3 (borrador) · **Fecha:** 2026-10-04
+> **Estado:** v0.5 (borrador) · **Fecha:** 2026-10-04
 > Documento vivo: marca las casillas al avanzar, responde las decisiones abiertas (§15) y registra cada cambio de rumbo en la bitácora (§16).
 
 ## Resumen
@@ -12,11 +12,12 @@ Una biblioteca personal de artículos que se alimenta desde la terminal (soltand
 - **Ingesta de dos formas:** todos los PDFs de `inbox/`, o una lista de DOIs. En el segundo caso se descarga el PDF (acceso abierto o institucional) y, si falla, se pide **activar el OpenVPN de la UNAM**.
 - **Fuente de verdad en texto plano** (Markdown + YAML) en `library/`, un archivo por artículo. Los PDFs no van a git, pero `inbox/` y `pdfs/` sí existen en el repositorio (vacías).
 - **Cada artículo se procesa una vez:** resumen + clasificación (tipo de estudio: experimental, numérico o ambos; país, estado/provincia y localidad) + **descripción de figuras**, con el backend que elija cada máquina (en el iMac, Claude).
-- **Los PDFs se borran** en cuanto el texto y las figuras quedan guardados y verificados. Se recuperan por DOI si hace falta verlos.
+- **Los PDFs ingeridos se mueven a `pdfs/`:** quedan solo en la máquina local, sin respaldo y fuera de git. El texto y las figuras sí están en git, así que las demás máquinas no necesitan los PDFs.
 - **Perfiles por máquina versionados** (`machines/imac-ier.toml`, `machines/mbp-m5.toml`…): cada computadora declara su modelo local, su backend de resúmenes y sus rutas. Solo los secretos quedan fuera de git (`.env`).
 - **Proyectos explícitos:** se crean con `sb project create` o pidiéndoselo al agente en lenguaje natural. `--project` solo acepta proyectos existentes. El **BibTeX lo genera el código**, nunca el LLM.
 - **Duplicados:** hash del PDF → DOI normalizado → título difuso.
-- **Migración desde Zotero** una sola vez (331 elementos), conservando tus citekeys, para luego prescindir de Zotero por completo.
+- **Sin depender de ningún gestor bibliográfico:** una biblioteca existente se trae con un `.bib` (conservando citekeys) y sus PDFs en `inbox/`.
+- **Licencia AGPL-3.0-or-later**, la que exige PyMuPDF, el extractor de PDF.
 
 ## Cambios en v0.2 (tus 17 comentarios)
 
@@ -50,6 +51,21 @@ Una biblioteca personal de artículos que se alimenta desde la terminal (soltand
 | 7 | ¿Interpretar figuras? | Sí: descripción de cada figura con un modelo con visión, al ingerir | §5.9 |
 | 8 | OpenVPN con IP de la UNAM | Detección por IP (rangos verificados en LACNIC) | §5.2 |
 | 9 | Prescindir de Zotero | Migración con números reales de tu biblioteca | §5.7 |
+
+## Cambios en v0.4 (tercera ronda)
+
+| Comentario | Cambio en el plan | Dónde |
+|---|---|---|
+| No quedar ligado a Zotero | Se elimina `sb import zotero`; en su lugar, `sb import bib` (cualquier `.bib`) + PDFs en `inbox/` | §5.7 |
+| Mac mini: Intel, 48 GB, con Claude | Perfil igual al del iMac: procesa y consulta con Claude | §1.2 |
+| Licencia MIT | Licencia MIT; PyMuPDF (AGPL) se sustituye por extractores permisivos; la CI vigila las licencias | §1.2, §8.1 |
+| PDFs ingeridos a un directorio, locales, sin respaldo | Se mueven a `pdfs/` y se conservan; ya no se borran | §5.1, §10 |
+
+## Cambios en v0.5
+
+| Comentario | Cambio en el plan | Dónde |
+|---|---|---|
+| Volver a PyMuPDF y cambiar la licencia | Extractor `pymupdf4llm`; licencia AGPL-3.0-or-later en lugar de MIT | §1.2, §8.1 |
 
 ## Índice
 
@@ -94,26 +110,27 @@ Una biblioteca personal de artículos que se alimenta desde la terminal (soltand
 | R14 | Nada corriendo en segundo plano; todo bajo demanda | §2, §6.2 |
 | R15 | Funcionar en varias Macs, cada una con su configuración | §1.2, §3.5 |
 | R16 | Sin instalaciones globales cuando exista alternativa con `uv` | §8.2 |
-| R17 | Dejar Zotero sin perder biblioteca ni citekeys | §5.7 |
+| R17 | Traer una biblioteca existente sin depender de Zotero ni de otro gestor | §5.7 |
 | R18 | Interpretar las figuras de los artículos | §5.9 |
-| R19 | Borrar los PDFs una vez extraído su contenido | §5.1 |
+| R19 | Guardar los PDFs ingeridos en una carpeta local, fuera de git | §5.1 |
 
 ### 1.2 Restricciones y contexto
 
 - **GitHub:** bloquea archivos > 100 MiB (advierte desde 50 MiB) y recomienda repositorios de menos de 1 GB.
 - **Derechos de autor:** el texto completo y los PDFs no se publican → repo de datos **privado**; PDFs nunca en git.
 - **Acceso institucional:** acceso a casi cualquier artículo desde la red de la UNAM o con su OpenVPN, que te da una IP de la UNAM (`132.247.0.0/16` y `132.248.0.0/16`, verificados en LACNIC).
-- **Disco:** el iMac tiene 1.3 TB libres (30% usado). El 88% que mencionaste parece ser tu cuota de almacenamiento de Zotero, que deja de importar al migrar.
+- **Disco:** el iMac tiene 1.3 TB libres (30% usado); guardar los PDFs en local no es problema.
 - **Máquinas** (cada una decide qué usar en su perfil, §3.5):
 
 | Máquina | Hardware | LLM local con Ollama | Uso sugerido (lo decides tú en el perfil) |
 |---|---|---|---|
 | iMac (actual) | Intel i5-8500, solo CPU, 48 GB, macOS 12.7.4 | Lento: sirve para respuestas cortas con modelos MoE de pocos parámetros activos | **Decidido:** procesar con Claude; consultas con Claude o `sb ask` local |
 | MacBook Pro M5 | Apple Silicon (GPU Metal), 64 GB | Cómodo con modelos de ~20–35B; procesar prompts largos es viable | Procesar y consultar en local, sin internet |
-| Mac mini | Apple Silicon (modelo y RAM por definir, D12) | Según la RAM | Por definir |
+| Mac mini | Intel, solo CPU, 48 GB | Igual que el iMac | **Decidido:** procesar y consultar con Claude |
 
 - **Consecuencias para el diseño:**
-  - El **extractor de PDF debe ser el mismo en todas las máquinas**, porque el texto completo se versiona: si cada Mac extrajera distinto, habría diffs falsos. Se usa `pymupdf4llm` (funciona en Intel y Apple Silicon) con versión fijada en `uv.lock`. docling y marker requieren PyTorch, que ya no publica binarios para Mac Intel con Python 3.13, así que no sirven en el iMac.
+  - El **extractor de PDF debe ser el mismo en todas las máquinas**, porque el texto completo se versiona: si cada Mac extrajera distinto, habría diffs falsos. Versión fijada en `uv.lock`.
+  - **Extractor:** `pymupdf4llm` (PyMuPDF), que funciona en Intel y Apple Silicon y da buen Markdown (encabezados, columnas, tablas, OCR con Tesseract). Es AGPL-3.0, y por eso el código también lo es (§8.1). docling y marker requieren PyTorch, que ya no publica binarios para Mac Intel con Python 3.13.
   - LM Studio y MLX solo funcionan en Apple Silicon → Ollama es el denominador común.
   - Tesseract (OCR) ya está instalado en el iMac; en las otras Macs, `brew install tesseract` (§8.2).
 - **Entorno:** Python 3.13 gestionado con `uv`.
@@ -169,8 +186,8 @@ $ uv run sb ask "¿qué artículos experimentales hay sobre techos verdes en cli
 8. **Todo lo que genera un LLM registra su procedencia** (modelo, versión del prompt, máquina, fecha, hash del texto fuente) para regenerarlo selectivamente.
 9. **Agnóstico del agente.** Un núcleo en Python con dos fachadas: CLI (`sb`) y servidor MCP. Reglas y flujos en `AGENTS.md` y en *skills* que leen Claude Code y OpenCode.
 10. **Respuestas fundamentadas.** Toda afirmación sobre un artículo se cita como `[citekey, p. N]`. Si algo no está en el texto, se dice explícitamente.
-11. **Extraer todo antes de borrar.** Un PDF solo se borra cuando su texto completo y sus figuras quedaron guardados y verificados. Todas las operaciones son idempotentes y atómicas.
-12. **El código es compartible.** Nada personal ni específico de una institución en el código: correo, rangos de IP, mensaje de VPN y vocabularios viven en la configuración de cada biblioteca.
+11. **Nunca perder un PDF.** Mover es copiar → verificar hash → borrar el original de `inbox/`. Todas las operaciones son idempotentes y atómicas.
+12. **El código es compartible.** Nada personal ni específico de una institución en el código: correo, rangos de IP, mensaje de VPN y vocabularios viven en la configuración de cada biblioteca. Licencia AGPL-3.0-or-later.
 
 ---
 
@@ -182,7 +199,7 @@ $ uv run sb ask "¿qué artículos experimentales hay sobre techos verdes en cli
 
 | Repo | Contenido | Visibilidad |
 |---|---|---|
-| `second-brain` → [AltamarMx/second-brain](https://github.com/AltamarMx/second-brain), local en `~/second-brain` | Código: paquete `second_brain`, pruebas, documentación técnica, plantillas de skills y de `AGENTS.md` | Privado por ahora. Para compartirlo: invitar colaboradores o hacerlo público (licencia, D16) |
+| `second-brain` → [AltamarMx/second-brain](https://github.com/AltamarMx/second-brain), local en `~/second-brain` | Código: paquete `second_brain`, pruebas, documentación técnica, plantillas de skills y de `AGENTS.md` | Licencia AGPL-3.0-or-later. Privado por ahora; para compartirlo, invitar colaboradores o hacerlo público |
 | `biblioteca` → [AltamarMx/biblioteca](https://github.com/AltamarMx/biblioteca), local en `~/biblioteca` | Datos: `library/`, `inbox/`, `pdfs/`, configuración, perfiles de máquina, skills y `AGENTS.md` generados | **Privado siempre** |
 
 El `pyproject.toml` del repo de datos solo declara la dependencia:
@@ -213,7 +230,7 @@ uv add "second-brain @ git+ssh://git@github.com/AltamarMx/second-brain"
               │   ingest · fetch · metadata · dedupe ·  │
               │   process (resumen, clasificación,      │
               │   figuras) ·                            │
-              │   library · projects · bibtex · zotero ·│
+              │   library · projects · bibtex · import ·│
               │   index · backends (claude/ollama/api)  │
               └─────┬──────────────┬──────────────┬─────┘
                     ▼              ▼              ▼
@@ -246,7 +263,7 @@ second-brain/
 │   ├── process.py             # resumen + clasificación de un artículo
 │   ├── figures.py             # localizar figuras, renderizarlas y describirlas
 │   ├── backends/              # claude_cli, ollama, anthropic (misma interfaz; texto e imagen)
-│   ├── citekey.py  projects.py  bibtex.py  zotero.py
+│   ├── citekey.py  projects.py  bibtex.py  import_bib.py
 │   ├── index/                 # SQLite FTS5 (+ sqlite-vec)
 │   ├── prompts/               # process.v1.md, answer.v1.md (versionados)
 │   └── templates/             # esqueleto del repo de datos: AGENTS.md, skills, README, .gitignore
@@ -282,7 +299,7 @@ biblioteca/
 │   └── projects/{slug}.md     # Descripción de cada proyecto
 │
 ├── inbox/.gitkeep             # ══ LOCAL ══ la carpeta existe en git; su contenido no
-├── pdfs/.gitkeep              # ══ LOCAL ══ temporal: PDFs en proceso, sin DOI o recuperados para verlos
+├── pdfs/.gitkeep              # ══ LOCAL ══ PDFs ya ingeridos ({citekey}.pdf), solo en esta máquina, sin respaldo
 └── .cache/                    # ══ DERIVADO ══ index.sqlite, caché HTTP, lock
 ```
 
@@ -326,7 +343,7 @@ Respuesta al comentario 16: **`config.local.toml` desaparece**. Lo que antes iba
 
 | Archivo | ¿En git? | Contenido |
 |---|---|---|
-| `config.toml` | Sí | Preferencias de la biblioteca: idioma de resúmenes, formato de citekey, vocabularios, política de PDFs, figuras, acceso institucional, correo para Crossref/Unpaywall |
+| `config.toml` | Sí | Preferencias de la biblioteca: idioma de resúmenes, formato de citekey, vocabularios, figuras, acceso institucional, correo para Crossref/Unpaywall |
 | `machines/{nombre}.toml` | Sí | Lo que depende de cada computadora: modelos, backend de procesamiento, agente por defecto, rutas (PDFs, `.bib` de cada proyecto) |
 | `.env` | **No** | Secretos: `ANTHROPIC_API_KEY`, `OPENALEX_API_KEY`, etc. Todos opcionales |
 
@@ -345,10 +362,6 @@ citekey_format = "{auth}{year}{word}"
 [vocab]
 study_type = ["experimental", "numerico", "ambos", "teorico", "revision", "otro"]
 project_kind = ["tesis", "articulo", "proyecto", "curso", "otro"]
-
-[pdfs]
-delete_after_extract = true             # se borran cuando texto y figuras están verificados
-keep_without_doi = true                 # los que no tienen DOI no se pueden recuperar (D17)
 
 [figures]
 describe = true                         # §5.9
@@ -401,7 +414,7 @@ schema_version: 1
 citekey: garcia2021thermal
 type: article-journal              # tipo CSL: article-journal, paper-conference, chapter, book, thesis, report…
 doi: 10.5555/ejemplo.2021.0001
-ids: {arxiv: null, isbn: null, openalex: null, zotero: null}
+ids: {arxiv: null, isbn: null, openalex: null}
 title: "Thermal performance of earth-sheltered dwellings in hot climates"
 authors:
   - {family: García, given: Ana, orcid: null}
@@ -427,13 +440,12 @@ projects:                          # un artículo puede estar en varios proyecto
   tesis-doctoral:
     added: 2026-10-04
     note: "Cap. 2: datos para validar el modelo"
-pdf:                               # datos del PDF original, aunque ya se haya borrado
+pdf:                               # null si aún no hay PDF; el archivo está en pdfs/{citekey}.pdf
   sha256: 9f2c…                    # sirve para detectar duplicados y re-vincular
   pages: 14
   size_bytes: 2345678
-  source: institutional            # inbox | openaccess | institutional | zotero
+  source: institutional            # inbox | openaccess | institutional
   original_filename: "Garcia_2021.pdf"
-  stored: false                    # false: borrado tras extraer; true: está en pdfs/
 figures: 6                         # figuras descritas en library/figures/
 status: processed                  # awaiting_pdf, needs_review, needs_processing, processed
 flags: []                          # doi_uncertain, metadata_mismatch, ocr, possible_duplicate, pdf_version_mismatch, retracted
@@ -528,7 +540,7 @@ El LLM usa este texto para sugerir a qué proyectos pertenece cada artículo nue
 - Transliteración: `Pérez` → `perez`, `Müller` → `muller`; partículas juntas (`van der Berg` → `vanderberg`).
 - Colisión → sufijo: `garcia2021thermal-b`, `-c`…
 - **Inmutable** una vez asignado, aunque se corrijan los metadatos.
-- **Los artículos importados de Zotero conservan su citekey** cuando lo tienen (20 de tus elementos usan el campo nativo de Zotero 7; no usas Better BibTeX), para que tus `.tex` existentes sigan compilando (§5.7).
+- **Los artículos importados de un `.bib` conservan su citekey**, para que tus `.tex` existentes sigan compilando (§5.7). Si chocara con uno existente, se avisa y no se importa esa entrada.
 
 ### 4.6 Versionado del esquema
 
@@ -572,7 +584,7 @@ uv run sb ingest --retry                 # reintenta los que quedaron esperando 
 9. **Registro** → `library/papers/{key}.md` con `status: needs_processing`.
 10. **Figuras** (§5.9): se localizan, se renderizan y se describen con el backend del perfil.
 11. **Procesar** (resumen + clasificación, §5.3), salvo `--no-process` o `backend = "none"`.
-12. **Borrar el PDF** (`[pdfs].delete_after_extract`), solo si el texto completo quedó escrito y validado (mismas páginas que el PDF) y las figuras están descritas. Si falta algo (p. ej., con `backend = "none"`), el PDF espera en `pdfs/{key}.pdf` hasta completarse. Los que no tienen DOI se conservan (`keep_without_doi`).
+12. **Mover el PDF** → `pdfs/{key}.pdf` (copiar → verificar hash → borrar de `inbox/`). Queda solo en esta máquina, fuera de git y sin respaldo.
 13. **Proyecto** (`--project slug`, debe existir; §5.5) y **actualización incremental del índice**.
 14. **Reporte**: ingeridos · duplicados · por revisar · esperando PDF · errores (`--json` para agentes).
 
@@ -580,7 +592,7 @@ Detalles:
 
 - **Normalización del DOI:** minúsculas, sin prefijos (`https://doi.org/`, `doi:`) y con `%2F` decodificado. Se guarda tal como lo da Crossref y se compara normalizado.
 - **Errores:** cada paso es idempotente. Si algo falla, el PDF pasa a `inbox/_errores/` con el motivo en el reporte y al repetir `sb ingest` se continúa donde se quedó.
-- **Opciones:** `--dry-run`, `--doi 10.xxx/yyy` (forzar el DOI de un PDF), `--project slug`, `--no-process`, `--commit`.
+- **Opciones:** `--dry-run`, `--doi 10.xxx/yyy` (forzar el DOI de un PDF), `--project slug`, `--no-process`, `--limit N` (procesar por partes), `--commit`.
 - **Concurrencia:** un *lock* en `.cache/` impide dos ingestas simultáneas.
 
 ### 5.2 Descarga de PDFs por DOI (comentarios 7 y 15)
@@ -600,7 +612,7 @@ Orden de intentos:
 
 Reglas de cortesía, para que una editorial no bloquee a toda la UNAM: una descarga a la vez, una pausa entre descargas (`seconds_between_downloads`) y un máximo por ejecución (`max_downloads_per_run`). Nunca descargas masivas (§10).
 
-`sb pdf status` lista los registros esperando PDF. `sb pdf get KEY` recupera temporalmente el PDF de un artículo ya ingerido (para verlo o reprocesar figuras) con el mismo orden de intentos, y `sb pdf clean` borra los temporales. Si el PDF recuperado tiene otro hash (preprint, manuscrito aceptado o versión editorial), se conserva y se marca `pdf_version_mismatch`, porque las páginas citadas se refieren al PDF original.
+`sb pdf status` lista los registros esperando PDF y los que no tienen PDF en esta máquina (p. ej., en una máquina nueva). `sb pdf get KEY` (o `--missing`) los descarga a `pdfs/` con el mismo orden de intentos. `sb pdf open KEY` abre el PDF local, o el DOI en el navegador si no está. Si el PDF recuperado tiene otro hash (preprint, manuscrito aceptado o versión editorial), se conserva y se marca `pdf_version_mismatch`, porque las páginas citadas se refieren al PDF original.
 
 ### 5.3 Procesamiento: resumen + clasificación
 
@@ -697,22 +709,21 @@ Reglas de respuesta (en `AGENTS.md`):
 - Si no aparece tras buscar: "El artículo no lo menciona" (diciendo qué se buscó). Nunca se rellena con conocimiento general; si lo pides, va aparte y etiquetado.
 - Preguntas en español sobre artículos en inglés: buscar también con los términos en inglés, hasta tener embeddings multilingües (fase 7).
 
-### 5.7 Migración desde Zotero (comentario 6)
+### 5.7 Traer una biblioteca existente (sin depender de ningún gestor)
 
-Una sola vez, para prescindir de Zotero. Tu biblioteca actual (leída el 2026-10-04 de una copia): **331 elementos, 248 con DOI, 419 PDFs (1.8 GB), 8 colecciones, 34 etiquetas, 3 notas y 20 citekeys** nativos de Zotero 7.
+El código no sabe nada de Zotero ni de ningún otro gestor bibliográfico. Para traer artículos que ya tienes hay dos entradas genéricas:
 
 ```bash
-uv run sb import zotero --dry-run        # qué se importaría, duplicados y faltantes
-uv run sb import zotero                  # importa; nunca modifica ~/Zotero
+uv run sb import bib refs.bib --dry-run          # qué se registraría, duplicados, choques de citekey
+uv run sb import bib refs.bib [--project slug]   # un registro por entrada, conservando su citekey
+cp carpeta-con-pdfs/*.pdf inbox/ && uv run sb ingest   # cada PDF se asocia a su registro
 ```
 
-- Lee una **copia** de `~/Zotero/zotero.sqlite`, de solo lectura y con Zotero cerrado, y los archivos de `~/Zotero/storage/`.
-- Cada elemento pasa por la ingesta normal (DOI, deduplicación, texto completo). Si no tiene DOI, se usan los metadatos de Zotero (`metadata_source: zotero`).
-- **Conserva tus 20 citekeys** existentes; los demás se generan con el formato de §4.5.
-- **PDFs:** se leen de `~/Zotero/storage/` y se procesan como cualquier PDF (texto + figuras). Los de elementos con DOI no se copian a `pdfs/`; los de los 83 elementos sin DOI sí, porque no se podrían recuperar. Hay más PDFs que elementos (419 contra 331): los adjuntos extra (suplementos, versiones) se reportan para que decidas.
-- **Colecciones → proyectos:** te propone el mapeo y crea los proyectos. **Etiquetas → `tags`**. **Notas de Zotero → `library/notes/{key}.md`**.
-- Procesar 331 artículos con figuras es un lote grande para la cuota de Claude: conviene hacerlo por partes (`sb import zotero --limit 50`) o con `backend = "ollama"` en la MacBook M5, de noche.
-- **Al terminar:** `sb check`, comparar conteos con el `--dry-run` y verificar que tus `.tex` compilen con `sb bib --from-tex`. Después puedes desinstalar Zotero y borrar `~/Zotero/` (conviene guardar antes una copia comprimida de esa carpeta por unos meses).
+- `sb import bib` lee cualquier `.bib`: de Zotero, Mendeley, JabRef o escrito a mano. Con DOI, los metadatos vienen de Crossref; sin DOI, del `.bib`. **El citekey del `.bib` se conserva**, y los `keywords` pasan a `tags`. Las entradas quedan en `awaiting_pdf` hasta que llegue su PDF.
+- Al soltar los PDFs en `inbox/`, la ingesta los asocia a su registro por DOI o, si no tienen, por título (§5.4). Los que no tengan PDF pueden quedarse así (solo metadatos) o descargarse con `sb pdf get --missing`, por partes.
+- **Proyectos:** exporta un `.bib` por grupo o colección e impórtalo con `--project`.
+- **Tu caso, una sola vez:** desde Zotero, Archivo → Exportar biblioteca → BibTeX (o una colección a la vez), y copia los PDFs de `~/Zotero/storage/*/` a `inbox/`. Como referencia, son 331 elementos, 248 con DOI, 419 PDFs (1.8 GB), 8 colecciones y 20 citekeys. Después puedes desinstalar Zotero: nada en el código depende de él.
+- Es un lote grande para la cuota de Claude: conviene ingerir por partes (`uv run sb ingest --limit 50`).
 
 ### 5.8 Sincronización y máquina nueva
 
@@ -722,11 +733,11 @@ uv run sb import zotero                  # importa; nunca modifica ~/Zotero
   2. `uv run sb doctor`: comprueba uv, git, Tesseract, Ollama, Claude Code y OpenCode, y te dice qué falta.
   3. `uv run sb machine init`: crea `machines/{nombre}.toml` (modelos, backend, rutas) y `.env` si hace falta.
   4. `uv run sb index rebuild`.
-  5. Nada más: como los PDFs ya no hacen falta, una máquina nueva no necesita descargarlos. Los PDFs sin DOI que se conservan viven solo en la máquina donde se ingirieron (§10).
+  5. Los PDFs no se sincronizan: cada máquina tiene los suyos. Como el texto y las figuras ya están en git, no hace falta descargarlos todos. Si necesitas ver uno, usa `sb pdf get KEY` (con el OpenVPN).
 
 ### 5.9 Figuras (comentario 7)
 
-**Sí se pueden interpretar.** Como el PDF se borra, las figuras se interpretan **al ingerir** y lo que queda es texto:
+**Sí se pueden interpretar.** Las figuras se interpretan **al ingerir** y lo que queda es texto, disponible en todas tus máquinas aunque el PDF solo esté en una:
 
 1. **Localizar:** PyMuPDF encuentra los pies de figura ("Fig. 3", "Figure 3") y las imágenes de cada página. Muchas gráficas son vectoriales (no son imágenes incrustadas), así que se renderiza la región de la figura a PNG, o la página completa si no se puede delimitar. Los PNG son temporales (`.cache/`).
 2. **Describir:** un modelo con visión recibe la imagen, su pie de figura y el párrafo que la cita, y devuelve:
@@ -757,7 +768,7 @@ contra hora del día (eje x). El caso B se mantiene ~2–3 °C por debajo del A 
 - **Regla de respuesta:** una cifra tomada de una figura se cita como `[citekey, Fig. 3, p. 5]` y se aclara que es una lectura aproximada de la gráfica. Si el texto da la cifra, el texto tiene prioridad.
 - **Límites:** los valores leídos de gráficas son aproximados; las figuras muy densas (mapas, mosaicos de fotos) se describen en términos generales; las ecuaciones no se tratan como figuras. Cuesta más cuota: un artículo típico tiene de 5 a 10 figuras, que se envían juntas en una sola llamada.
 - **Tablas:** pymupdf4llm las extrae como tablas Markdown en el texto completo. Si una tabla es una imagen, se trata como figura.
-- `[figures].describe = false` lo desactiva. `sb figures KEY` vuelve a describir las figuras de un artículo, recuperando el PDF temporalmente (`sb pdf get`).
+- `[figures].describe = false` lo desactiva. `sb figures KEY` vuelve a describir las figuras de un artículo, usando el PDF local (o descargándolo con `sb pdf get` si esta máquina no lo tiene).
 
 ---
 
@@ -800,8 +811,8 @@ sb bib --from-tex main.tex -o refs.bib
 | `sb meta KEY --refresh` / `--set campo=valor` | Refrescar metadatos desde Crossref o corregirlos |
 | `sb project create/add/remove/list/show/archive` | Proyectos |
 | `sb bib …` | BibTeX por proyecto, por claves o desde un `.tex` |
-| `sb pdf status/get/open/clean` | PDFs: esperando descarga, recuperar uno temporalmente, abrir el DOI en el navegador, borrar temporales |
-| `sb import zotero` | Migración única desde Zotero |
+| `sb pdf status/get/open` | PDFs: faltantes o esperando descarga, descargar a `pdfs/`, abrir el local o el DOI |
+| `sb import bib FILE.bib` | Registrar las entradas de un `.bib` existente, conservando sus citekeys |
 | `sb chat [claude \| opencode]` | Abre el agente en la biblioteca, ya configurado |
 | `sb ask "pregunta" [--paper KEY]` | Pregunta suelta con el LLM del perfil, sin abrir chat |
 | `sb index update/rebuild` | Índice derivado |
@@ -889,7 +900,7 @@ Contenido mínimo de `AGENTS.md`:
 - **Modelos por máquina** (revisar los vigentes al implementar; deben soportar *tool calling*):
   - **iMac (CPU):** MoE con pocos parámetros activos (en su momento, p. ej., Qwen3-30B-A3B o gpt-oss-20b). Unos 5–10 tokens/s y varios minutos para procesar un prompt de 10k tokens: solo fragmentos y respuestas breves.
   - **MacBook Pro M5 (64 GB):** los mismos modelos corren mucho más rápido con la GPU, y caben modelos más grandes. Ahí sí es viable procesar artículos completos en local.
-  - **Mac mini:** según su RAM (D12).
+  - **Mac mini (Intel, 48 GB):** igual que el iMac; usa Claude.
 - La fase 6 mide tiempos reales en cada máquina y los documenta en `docs/maquinas.md`.
 
 ---
@@ -942,10 +953,9 @@ Contenido mínimo de `AGENTS.md`:
 | LLM | Cliente `openai` hacia Ollama; `anthropic` opcional; `claude -p` vía subproceso | `litellm` |
 | MCP | SDK oficial `mcp` (FastMCP) | — |
 | BibTeX | Generador propio + `pylatexenc` | `bibtexparser` v2 para leer `.bib` existentes |
-| Zotero | `sqlite3` (biblioteca estándar) sobre una copia de `zotero.sqlite` | API local de Zotero 7 |
 | Calidad | `pytest`, `ruff`, `pre-commit` (como dependencias de desarrollo, con `uv run`) | `mypy` / `pyright` |
 
-Licencias: PyMuPDF y pymupdf4llm son AGPL-3.0. No hay problema para uso personal, pero hay que tenerlo en cuenta si algún día publicas el código.
+**Licencias:** PyMuPDF y pymupdf4llm son AGPL-3.0, así que el código se publica como **AGPL-3.0-or-later**. Para ti no cambia nada. Quien reciba el código puede usarlo y modificarlo libremente, pero si lo redistribuye (o lo ofrece como servicio en red) debe hacerlo con su código fuente y bajo la misma licencia. El resto de las dependencias son permisivas (MIT, BSD, Apache) y compatibles con la AGPL.
 
 ### 8.2 Excepciones: herramientas de sistema (comentario 4)
 
@@ -970,6 +980,7 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 - [ ] Convertir este repo en paquete `src/second_brain/` (`[build-system]` con `uv_build`, `[project.scripts]` con `sb` y `sb-mcp`) y eliminar `main.py`.
 - [ ] `config.py` y `machines.py`: `config.toml`, perfiles de máquina, `.env`, `SB_HOME`, `SB_MACHINE`.
 - [ ] Modelos pydantic (`Paper`, `Project`, `FullText`, `Classification`) y `library.py` (escritura atómica y determinista).
+- [ ] `LICENSE` (AGPL-3.0-or-later).
 - [ ] `sb init RUTA` (esqueleto del repo de datos con `.gitkeep`, `.gitignore`, `.gitattributes`, hook de git con `sb check --fast`), `sb machine init`, `sb doctor`, `sb check`, `sb status`.
 - [ ] ruff + pytest + pre-commit + CI en el repo de código.
 - [ ] Esqueleto de documentación (§11).
@@ -982,7 +993,7 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 - [ ] Extracción con marcas de página; detección de PDF escaneado → OCR.
 - [ ] Detección y normalización de DOI e ID de arXiv; metadatos de Crossref con validación del título.
 - [ ] Deduplicación (hash, DOI, título difuso) y re-vinculación de PDFs.
-- [ ] Citekeys; PDFs procesados a `pdfs/`; escritura de `papers/` y `fulltext/`. Hasta la fase 4 los PDFs se conservan: el borrado se activa cuando ya se describen las figuras.
+- [ ] Citekeys; movimiento atómico a `pdfs/`; escritura de `papers/` y `fulltext/`.
 - [ ] `sb ingest` (`--dry-run`, `--doi`, `--json`), `sb show`, `sb text`.
 - [ ] Pruebas con PDFs sintéticos y respuestas HTTP grabadas (sin red).
 
@@ -994,7 +1005,7 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 - [ ] Acceso abierto (Unpaywall, arXiv).
 - [ ] Detección de red UNAM por IP pública (`[access].ip_ranges`) y mensaje de OpenVPN interactivo / `needs_vpn`.
 - [ ] Descarga institucional vía `citation_pdf_url` y enlaces de Crossref; validación `%PDF` + título; reglas de cortesía.
-- [ ] `sb pdf status/get/open/clean`.
+- [ ] `sb pdf status/get/open`.
 
 **Terminado cuando:** con 20 DOIs de editoriales distintas, cada uno termina descargado o en `awaiting_pdf` con un motivo claro; sin VPN se te pide activarlo, y con VPN `--retry` recupera los que tu suscripción cubre.
 
@@ -1010,27 +1021,26 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 - [ ] Prompt `process.v1` (resumen + clasificación); validación y procedencia.
 - [ ] Figuras: localizar, renderizar, describir (`figures.v1`), `library/figures/`, `sb figures`.
-- [ ] Borrado de PDFs tras verificar texto y figuras (`[pdfs]`); borrar los que quedaron de las fases 1–3 una vez procesados.
 - [ ] Backends `claude` (`claude -p`) y `none`; `sb process` (`--pending`, `--stale`); procesamiento al ingerir.
 - [ ] Índice SQLite FTS5 con filtros de clasificación; `sb search`, `sb list`, `sb passages`, `sb index`.
 - [ ] Skills `sb-ingerir`, `sb-consultar`, `sb-proyectos`, `sb-bibtex`; `AGENTS.md`; `sb agents sync`.
 - [ ] `.claude/settings.json`, hook `SessionStart`, `sb chat claude`.
 
-**Terminado cuando:** `uv run sb ingest` deja artículos resumidos, clasificados y con figuras descritas, y sin PDF, sin abrir ningún agente; y desde `uv run sb chat` puedes preguntar "¿qué tengo sobre X en México?", pedir detalles con citas de página, crear un proyecto en lenguaje natural y obtener su `.bib`.
+**Terminado cuando:** `uv run sb ingest` deja artículos resumidos, clasificados y con figuras descritas, sin abrir ningún agente; y desde `uv run sb chat` puedes preguntar "¿qué tengo sobre X en México?", pedir detalles con citas de página, crear un proyecto en lenguaje natural y obtener su `.bib`.
 
-### Fase 5: Migración desde Zotero
+### Fase 5: Traer tu biblioteca existente
 
-- [ ] `sb import zotero` (`--dry-run`, `--move`) con citekeys conservados, colecciones → proyectos, etiquetas y notas.
-- [ ] Procesar en lotes los artículos importados.
+- [ ] `sb import bib` (`--dry-run`, `--project`) con citekeys conservados y asociación posterior de PDFs.
+- [ ] Ingesta por partes (`--limit`) de tus PDFs actuales.
 
-**Terminado cuando:** todos tus elementos de Zotero están en la biblioteca (conteos cuadrados en `sb check`), tus `.tex` compilan con `sb bib --from-tex`, y puedes desinstalar Zotero. Puede adelantarse después de la fase 3 si urge el espacio, dejando el procesamiento para después.
+**Terminado cuando:** todas las entradas de tu `.bib` están en la biblioteca, con su PDF asociado cuando lo hay, y tus `.tex` compilan con `sb bib --from-tex`. Puede adelantarse después de la fase 3, dejando el procesamiento para después.
 
 ### Fase 6: LLM local, MCP y OpenCode
 
 - [ ] Backends `ollama` y `anthropic`; `sb ask`.
 - [ ] Servidor MCP `sb-mcp`, `.mcp.json` y `opencode.json`.
 - [ ] `sb chat opencode`, agente `bibliotecario`, `num_ctx` ampliado.
-- [ ] Elegir modelos y medir tiempos en el iMac y en la M5 (y la Mac mini); documentar en `docs/maquinas.md`.
+- [ ] Elegir modelos y medir tiempos en el iMac y en la M5; documentar en `docs/maquinas.md`.
 
 **Terminado cuando:** en la M5, sin internet, puedes procesar artículos, buscar, pedir detalles con citas y obtener el BibTeX de un proyecto con OpenCode + Ollama.
 
@@ -1054,19 +1064,15 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ## 10. Logística que conviene no olvidar
 
-**PDFs borrados tras extraer (comentario 6)**
+**PDFs**
 
-- Un PDF pesa ~1–5 MB; su texto completo, ~100 KB. Una vez extraídos el texto y las figuras, el PDF solo hace falta para verlo.
-- **Lo que se pierde al borrarlo**, y cómo se recupera:
-  - Ver el original → `sb pdf get KEY` (con el OpenVPN) o `sb pdf open KEY` en el navegador.
-  - Re-extraer con un extractor mejor o re-describir figuras con un modelo mejor → hay que volver a descargar cada PDF. Para cientos de artículos son muchas descargas, así que se hace por partes y respetando las reglas de cortesía.
-  - Verificar contra el PDF la página de una cita → mismo caso que ver el original.
-- **Los PDFs sin DOI se conservan** en `pdfs/` (`keep_without_doi`), porque no hay forma de recuperarlos: unos 83 de tu Zotero. Como `pdfs/` no está en git, necesitan respaldo aparte (D17).
-- Los modelos de Ollama pesan ~18–20 GB cada uno. No es problema en el iMac (1.3 TB libres), pero conviene revisarlo en la M5 y en la Mac mini.
+- Los PDFs ingeridos se quedan en `pdfs/` de la máquina donde se ingirieron: fuera de git y **sin respaldo, por decisión**. Si se pierden, el texto, las figuras y los metadatos siguen en git, y los que tienen DOI se pueden volver a descargar con `sb pdf get` (los que no tienen DOI no).
+- Un PDF pesa ~1–5 MB; su texto completo, ~100 KB. Mil PDFs son unos 2–5 GB, sin problema en el iMac (1.3 TB libres).
+- Los modelos de Ollama pesan ~18–20 GB cada uno; conviene revisarlo en la M5.
 
 **Respaldo**
 
-- Todo lo importante está en git (GitHub). Solo los PDFs sin DOI de `pdfs/` necesitan respaldo aparte.
+- Todo lo que necesita respaldo está en git (GitHub). Los PDFs no se respaldan.
 - El índice no necesita respaldo: es derivado.
 
 **Acceso institucional y legal**
@@ -1129,7 +1135,7 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 ## 12. Calidad: pruebas, CI y evaluaciones
 
 - **Unitarias:** normalización de DOI; citekeys (acentos, partículas, colisiones); BibTeX (archivos *golden*); deduplicación; validación de clasificación contra vocabularios; detección de red; serialización determinista (escribir → leer → escribir da un resultado idéntico).
-- **Integración:** ingesta completa con PDFs sintéticos y respuestas HTTP grabadas (sin red), incluidas respuestas de editorial que devuelven HTML en lugar de PDF; importación desde una base de Zotero de prueba.
+- **Integración:** ingesta completa con PDFs sintéticos y respuestas HTTP grabadas (sin red), incluidas respuestas de editorial que devuelven HTML en lugar de PDF; importación de `.bib` de distintos orígenes (Zotero, JabRef, escrito a mano).
 - **CI del código (GitHub Actions):** ruff y pytest en cada push.
 - **Repo de datos:** hook de git local con `uv run sb check --fast` (esquema, vocabularios, tamaños, PDFs fuera de git). No requiere CI en GitHub, que necesitaría credenciales para instalar el paquete privado.
 - **Evaluaciones del LLM** (fases 6 y 7): preguntas → artículo esperado (recall@k); preguntas de detalle con respuesta conocida para vigilar alucinaciones; una muestra de clasificaciones y de descripciones de figuras revisadas a mano para comparar backends y modelos.
@@ -1150,10 +1156,9 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 | Extracción pobre (escaneados, tablas, ecuaciones) | OCR; flags; versión del extractor registrada; re-extracción |
 | LLM local lento en el iMac | Backend `claude` para procesar; la M5 para lotes locales; fragmentos en vez de texto completo |
 | Alucinaciones en las respuestas | Citas `[citekey, p. N]` obligatorias, solo texto recuperado, evaluaciones |
-| Borrar un PDF antes de extraer todo | Borrado solo tras verificar texto y figuras; los PDFs sin DOI se conservan |
-| Necesitar de nuevo cientos de PDFs (mejor extractor o modelo) | Re-descarga por partes, con las reglas de cortesía |
+| Pérdida de PDFs (sin respaldo) | Texto y figuras en git; los que tienen DOI se vuelven a descargar |
 | Código y datos desincronizados | Versión fijada en `uv.lock`; `schema_version`; `sb` se niega a escribir datos más nuevos |
-| Citekeys rotos en tus `.tex` | Inmutables; conservados desde Zotero; `sb bib --from-tex` avisa de las que faltan |
+| Citekeys rotos en tus `.tex` | Inmutables; conservados al importar un `.bib`; `sb bib --from-tex` avisa de las que faltan |
 | Conflictos de merge entre máquinas | Un archivo por artículo; índice fuera de git; `sb sync` |
 | Repositorio demasiado grande a largo plazo | Guardia de tamaño; separar `fulltext/` si `library/` pasa de 1 GB |
 
@@ -1175,22 +1180,22 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 | # | Pregunta | Estado / recomendación |
 |---|---|---|
 | D1 | ¿Código y datos en el mismo repositorio o en dos? | **Resuelta:** dos repos; el de datos instala el código desde GitHub con `uv` (§3.1) |
-| D2 | Formato del citekey | `apellido + año + primera palabra` (`garcia2021thermal`); los de Zotero se conservan |
+| D2 | Formato del citekey | `apellido + año + primera palabra` (`garcia2021thermal`); los de un `.bib` importado se conservan |
 | D3 | Idioma de los resúmenes | Español, con términos técnicos en inglés cuando no haya traducción establecida |
-| D4 | ¿Usas Zotero? | **Resuelta:** sí, pero quieres dejarlo → migración única (§5.7) |
-| D5 | ¿Dónde viven los PDFs? | **Resuelta:** se borran tras extraer texto y figuras; solo se conservan los que no tienen DOI |
+| D4 | ¿Usas Zotero? | **Resuelta:** sin ninguna dependencia de Zotero; `sb import bib` genérico (§5.7) |
+| D5 | ¿Dónde viven los PDFs? | **Resuelta:** en `pdfs/`, en local, sin respaldo |
 | D6 | ¿Servidor con GPU en el IER? | **Sustituida:** la M5 cubre el uso local pesado; un servidor sería solo otro perfil |
 | D7 | ¿BibTeX o BibLaTeX por defecto? | BibTeX (compatibilidad con plantillas de revistas); BibLaTeX como opción |
 | D8 | ¿Commit automático al ingerir? | Desactivado por defecto; `--commit` cuando lo pidas |
 | D9 | Nombre del comando | `sb` (corto); se cambia en `pyproject.toml` |
 | D10 | Nombre y ubicación del repo de datos | **Resuelta:** `biblioteca`, en `~/biblioteca` y en GitHub (privado) |
 | D11 | ¿Qué significa "región"? | **Resuelta:** toda la información de ubicación que haya: país, estado/provincia, localidad |
-| D12 | ¿Qué chip y cuánta RAM tiene la Mac mini? | Necesario para su perfil y para recomendar modelos |
-| D13 | ¿PDFs en la nube, locales o borrados? | **Resuelta:** borrados tras extraer (ver D5) |
+| D12 | ¿Qué chip y cuánta RAM tiene la Mac mini? | **Resuelta:** Intel, 48 GB; usa Claude |
+| D13 | ¿PDFs en la nube, locales o borrados? | **Resuelta:** locales (ver D5) |
 | D14 | ¿Cómo funciona el acceso remoto de la UNAM? | **Resuelta:** OpenVPN con IP de la UNAM → detección por rangos de IP |
-| D15 | ¿Usas Better BibTeX? | **Resuelta:** no; se conservan los 20 citekeys nativos de Zotero 7 |
-| D16 | Licencia del código si lo compartes | Si lo haces público, AGPL-3.0 (PyMuPDF es AGPL); con colaboradores en un repo privado no hace falta decidir aún |
-| D17 | Respaldo de los PDFs sin DOI (~83) | Time Machine, o una carpeta en la nube para `pdfs/` |
+| D15 | ¿Usas Better BibTeX? | **Resuelta:** no aplica; los citekeys vienen del `.bib` exportado |
+| D16 | Licencia del código | **Resuelta:** AGPL-3.0-or-later, por PyMuPDF |
+| D17 | Respaldo de PDFs | **Resuelta:** sin respaldo |
 
 ---
 
@@ -1202,5 +1207,7 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 | 2026-10-04 | v0.2: comentarios del usuario | Dos repos con `uv` + git; ingesta por DOI con acceso institucional y aviso de VPN; nada en segundo plano (`sb chat`, `sb ask`); perfiles por máquina en git y secretos en `.env`; sin instalaciones globales; clasificación (tipo de estudio y ubicación); proyectos explícitos con `kind` y creación en lenguaje natural; `inbox/` y `pdfs/` con `.gitkeep`; migración desde Zotero; política de espacio en disco |
 
 | 2026-10-04 | v0.3: segunda ronda | Sin `ingest.sh`; repos `second-brain` y `biblioteca` creados (privados); Claude en el iMac; ubicación = país, estado/provincia, localidad; PDFs borrados tras extraer (salvo sin DOI); descripción de figuras al ingerir; OpenVPN detectado por IP; migración desde Zotero con números reales |
+| 2026-10-04 | v0.4: tercera ronda | Sin dependencia de Zotero (`sb import bib` genérico); Mac mini Intel 48 GB con Claude; licencia MIT con pypdfium2 + pdfplumber en lugar de PyMuPDF; los PDFs ingeridos se conservan en `pdfs/`, locales y sin respaldo |
+| 2026-10-04 | v0.5 | De vuelta a PyMuPDF (pymupdf4llm); licencia AGPL-3.0-or-later en lugar de MIT |
 
-**Próximo paso:** responder D12, D16 y D17 (no bloquean) y arrancar la fase 0.
+**Próximo paso:** arrancar la fase 0. No quedan decisiones abiertas que la bloqueen.

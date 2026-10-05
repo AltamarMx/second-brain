@@ -3,5 +3,6 @@ name = "second-brain"
 version = "0.1.0"
 description = "Biblioteca personal de artículos científicos consultable con LLMs"
 readme = "README.md"
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.13"
 dependencies = []
