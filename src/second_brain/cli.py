@@ -14,9 +14,14 @@ from rich.table import Table
 
 from . import __version__
 from .checks import run_checks
-from .config import HomeNotFoundError, find_home
+from .config import HomeNotFoundError, find_home, load_config
 from .doctor import library_status, run_doctor
+from .ingest.doi import DOI_RE
+from .ingest.metadata import MetadataClient
+from .ingest.pipeline import IngestError, IngestOptions, Ingestor, IngestResult, LockedError
+from .library import Library
 from .machines import Agent, Backend, detect_machine_name, load_profile, profile_path
+from .reading import select_pages, select_section
 from .scaffold import ScaffoldReport, init_library, init_machine
 
 app = typer.Typer(
@@ -213,3 +218,188 @@ def status(
         console.print(f"  [red]{state.invalid} archivos inválidos → sb check[/]")
     console.print(f"  proyectos: {state.projects_active} activos de {state.projects_total}")
     console.print(f"  pdfs/ en esta máquina: {state.local_pdfs}")
+
+
+OUTCOME_LABEL = {
+    "ingested": ("[green]✓[/]", "ingeridos"),
+    "review": ("[yellow]?[/]", "por revisar"),
+    "attached": ("[green]+[/]", "PDF añadido"),
+    "relinked": ("[blue]↺[/]", "re-vinculados"),
+    "duplicate": ("[dim]=[/]", "duplicados"),
+    "offline": ("[yellow]![/]", "sin conexión"),
+    "error": ("[red]✗[/]", "errores"),
+}
+
+
+def _print_ingest(results: list[IngestResult], dry_run: bool) -> None:
+    for r in results:
+        mark, _ = OUTCOME_LABEL[r.outcome]
+        key = f" → [bold]{r.citekey}[/]" if r.citekey else ""
+        doi = f" [dim]{escape(r.doi)}[/]" if r.doi else ""
+        note = f"  [dim]{escape(r.message)}[/]" if r.message else ""
+        console.print(f"{mark} {escape(r.source)}{key}{doi}{note}")
+    counts = {o: sum(1 for r in results if r.outcome == o) for o in OUTCOME_LABEL}
+    summary = " · ".join(f"{n} {OUTCOME_LABEL[o][1]}" for o, n in counts.items() if n)
+    prefix = "(simulación) " if dry_run else ""
+    console.print(f"\n{prefix}{summary or 'nada que ingerir'}")
+
+
+@app.command()
+def ingest(
+    ctx: typer.Context,
+    items: Annotated[
+        list[Path] | None, typer.Argument(help="PDFs a ingerir (por defecto, todos los de inbox/).")
+    ] = None,
+    doi: Annotated[str | None, typer.Option(help="Forzar el DOI (solo con un PDF).")] = None,
+    project: Annotated[
+        str | None, typer.Option(help="Asignar lo ingerido a un proyecto existente.")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option(help="Mostrar qué pasaría sin escribir ni mover nada.")
+    ] = False,
+    limit: Annotated[int | None, typer.Option(min=1, help="Procesar como máximo N PDFs.")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Ingiere PDFs: DOI, metadatos, duplicados, texto completo y movimiento a pdfs/."""
+    home = _home(ctx)
+    lib = Library(home)
+    config = load_config(home)
+    paths = [p.expanduser().resolve() for p in items] if items else lib.inbox_pdfs()
+    for path in paths:
+        if not path.is_file():
+            hint = (
+                " (la ingesta por DOI llega en la fase 2)"
+                if DOI_RE.fullmatch(str(path.name))
+                else ""
+            )
+            console.print(f"[red]✗[/] no existe el archivo {escape(str(path))}{hint}")
+            raise typer.Exit(2)
+    paths = paths[:limit] if limit else paths
+    client = MetadataClient(lib.cache_dir, email=config.user.email)
+    options = IngestOptions(dry_run=dry_run, forced_doi=doi, project=project)
+    try:
+        results = Ingestor(lib, config, client, options).run(paths)
+    except (IngestError, LockedError) as exc:
+        console.print(f"[red]✗[/] {escape(str(exc))}")
+        raise typer.Exit(2) from exc
+    if as_json:
+        print(json.dumps([dataclasses.asdict(r) for r in results], ensure_ascii=False, indent=2))
+    else:
+        if not config.user.email:
+            console.print(
+                "[yellow]![/] Sin \\[user].email en config.toml: Crossref atiende más lento."
+            )
+        _print_ingest(results, dry_run)
+    if any(r.outcome in ("error", "offline") for r in results):
+        raise typer.Exit(1)
+
+
+def _read_paper(lib: Library, citekey: str):
+    if not lib.paper_path(citekey).is_file():
+        console.print(f"[red]✗[/] no existe el artículo {escape(citekey)}")
+        raise typer.Exit(1)
+    return lib.read_paper(citekey)
+
+
+@app.command()
+def show(
+    ctx: typer.Context,
+    citekey: Annotated[str, typer.Argument(help="Citekey del artículo.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Metadatos, clasificación y resumen de un artículo."""
+    lib = Library(_home(ctx))
+    doc = _read_paper(lib, citekey)
+    paper = doc.meta
+    local_pdf = lib.pdfs_dir / f"{citekey}.pdf"
+    if as_json:
+        data = paper.model_dump(mode="json")
+        data["summary"] = doc.body
+        data["local_pdf"] = str(local_pdf) if local_pdf.exists() else None
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+        return
+    authors = "; ".join(f"{a.family}, {a.given}" if a.given else a.family for a in paper.authors)
+    console.print(f"[bold]{escape(paper.title)}[/]")
+    console.print(escape(authors or "(sin autores)"))
+    venue = ", ".join(str(x) for x in (paper.container_title, paper.year) if x)
+    if venue:
+        console.print(escape(venue))
+    if paper.doi:
+        console.print(f"DOI: {escape(paper.doi)}")
+    flags = f" · {', '.join(paper.flags)}" if paper.flags else ""
+    console.print(f"[dim]{citekey} · {paper.status}{flags}[/]")
+    if paper.projects:
+        console.print("Proyectos: " + ", ".join(paper.projects))
+    console.print(f"PDF local: {local_pdf if local_pdf.exists() else 'no está en esta máquina'}")
+    console.print()
+    console.print(escape(doc.body) if doc.body else "[dim](sin resumen todavía)[/]")
+
+
+@app.command()
+def text(
+    ctx: typer.Context,
+    citekey: Annotated[str, typer.Argument(help="Citekey del artículo.")],
+    pages: Annotated[str | None, typer.Option(help="Páginas: 5, 4-6 u 8-.")] = None,
+    section: Annotated[
+        str | None, typer.Option(help="Sección cuyo encabezado contiene este texto.")
+    ] = None,
+) -> None:
+    """Texto completo de un artículo, o solo algunas páginas o una sección."""
+    lib = Library(_home(ctx))
+    _read_paper(lib, citekey)
+    if not lib.fulltext_path(citekey).is_file():
+        console.print(f"[red]✗[/] {escape(citekey)} no tiene texto completo (¿falta su PDF?)")
+        raise typer.Exit(1)
+    body = lib.read_fulltext(citekey).body
+    if pages:
+        try:
+            body = select_pages(body, pages)
+        except ValueError as exc:
+            console.print(f"[red]✗[/] {escape(str(exc))}")
+            raise typer.Exit(2) from exc
+    if section:
+        found = select_section(body, section)
+        if found is None:
+            console.print(f"[red]✗[/] no hay ninguna sección que contenga {escape(section)!r}")
+            raise typer.Exit(1)
+        body = found
+    print(body)
+
+
+@app.command()
+def remove(
+    ctx: typer.Context,
+    citekey: Annotated[str, typer.Argument(help="Citekey del artículo a eliminar.")],
+    delete_pdf: Annotated[
+        bool, typer.Option(help="Borrar también el PDF (por defecto va a inbox/_eliminados/).")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="No pedir confirmación.")] = False,
+) -> None:
+    """Elimina un artículo: registro, texto completo y figuras. Tus notas no se tocan."""
+    lib = Library(_home(ctx))
+    paper = _read_paper(lib, citekey).meta
+    pdf = lib.pdfs_dir / f"{citekey}.pdf"
+    console.print(f"Eliminar [bold]{citekey}[/]: {escape(paper.title)}")
+    if paper.projects:
+        console.print(f"  está en los proyectos: {', '.join(paper.projects)}")
+    if pdf.exists():
+        destino = "se borra" if delete_pdf else "pasa a inbox/_eliminados/"
+        console.print(f"  PDF local: {destino}")
+    if not yes and not typer.confirm("¿Continuar?", default=False):
+        raise typer.Exit(1)
+    removed = lib.remove_paper(citekey)
+    if pdf.exists():
+        if delete_pdf:
+            pdf.unlink()
+        else:
+            target = lib.inbox_dir / "_eliminados" / pdf.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            pdf.rename(target)
+    for path in removed:
+        console.print(f"[red]-[/] {path.relative_to(lib.home)}")
+    notes = lib.notes_dir / f"{citekey}.md"
+    if notes.exists():
+        console.print(f"[blue]i[/] Se conservan tus notas: {notes.relative_to(lib.home)}")
+    console.print(
+        "Si te arrepientes: git restore library/ (antes del commit); después sigue en el historial de git."
+    )

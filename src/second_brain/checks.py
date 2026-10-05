@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import ValidationError
 
 from .config import CONFIG_FILENAME, LibraryConfig, load_config
+from .ingest.doi import normalize_doi
 from .library import InvalidDocument, Library
 from .machines import MACHINES_DIRNAME, MachineProfile
 
@@ -45,13 +46,6 @@ class CheckReport:
     @property
     def ok(self) -> bool:
         return not self.errors
-
-
-def normalize_doi(doi: str) -> str:
-    doi = doi.strip().lower()
-    for prefix in ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "doi:"):
-        doi = doi.removeprefix(prefix)
-    return doi.replace("%2f", "/")
 
 
 def run_checks(home: Path, *, fast: bool = False) -> CheckReport:

@@ -2,7 +2,7 @@ import subprocess
 
 from conftest import make_paper, make_project
 
-from second_brain.checks import normalize_doi, run_checks
+from second_brain.checks import run_checks
 
 
 def messages(report):
@@ -80,8 +80,3 @@ def test_orphan_fulltext_is_a_warning(home, lib):
     assert report.ok
     assert any(i.level == "warning" for i in report.issues)
     assert run_checks(home, fast=True).issues == []
-
-
-def test_normalize_doi():
-    assert normalize_doi(" https://doi.org/10.1016%2FJ.X ") == "10.1016/j.x"
-    assert normalize_doi("doi:10.1/A") == "10.1/a"

@@ -98,6 +98,7 @@ Campos: `citekey`, `figures` (lista de `{id, page, kind}`) y `provenance` (proce
 | `[user]` | `email` |
 | `[library]` | `summary_language`, `process_prompt`, `citekey_format` |
 | `[vocab]` | `study_type`, `project_kind` (listas de valores permitidos) |
+| `[extract]` | `ocr_languages` (códigos de Tesseract; solo se usan los instalados) |
 | `[figures]` | `describe` |
 | `[access]` | `institution`, `ip_ranges` (CIDR), `vpn_hint`, `max_downloads_per_run`, `seconds_between_downloads` |
 | `[checks]` | `max_file_mb` |

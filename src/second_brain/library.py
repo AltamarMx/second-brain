@@ -176,11 +176,35 @@ class Library:
 
     # --- full text and figures ----------------------------------------------
 
+    def fulltext_path(self, citekey: str) -> Path:
+        return self.fulltext_dir / f"{citekey}.md"
+
+    def read_fulltext(self, citekey: str) -> Document[FullText]:
+        return self._read(self.fulltext_path(citekey), FullText)
+
+    def write_fulltext(self, fulltext: FullText, body: str) -> Path:
+        path = self.fulltext_path(fulltext.citekey)
+        atomic_write(path, dump_frontmatter(fulltext, body))
+        return path
+
     def iter_fulltexts(self) -> Iterator[Document[FullText] | InvalidDocument]:
         return self._iter(self.fulltext_dir, FullText)
 
     def iter_figure_sets(self) -> Iterator[Document[FigureSet] | InvalidDocument]:
         return self._iter(self.figures_dir, FigureSet)
+
+    def remove_paper(self, citekey: str) -> list[Path]:
+        """Delete the record, its full text and figures. Notes and the PDF are left alone."""
+        removed = []
+        for path in (
+            self.paper_path(citekey),
+            self.fulltext_path(citekey),
+            self.figures_dir / f"{citekey}.md",
+        ):
+            if path.exists():
+                path.unlink()
+                removed.append(path)
+        return removed
 
     # --- local files -------------------------------------------------------
 

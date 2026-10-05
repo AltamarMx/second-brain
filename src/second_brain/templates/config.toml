@@ -13,6 +13,9 @@ citekey_format = "{auth}{year}{word}"
 study_type = ["experimental", "numerico", "ambos", "teorico", "revision", "otro"]
 project_kind = ["tesis", "articulo", "proyecto", "curso", "otro"]
 
+[extract]
+ocr_languages = ["eng", "spa"]          # idiomas de Tesseract para PDFs escaneados (se usan los instalados)
+
 [figures]
 describe = true                         # describir las figuras al ingerir
 

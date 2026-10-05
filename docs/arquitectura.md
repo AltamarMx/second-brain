@@ -19,6 +19,14 @@ Para quien modifique el código. El porqué de cada decisión está en `PLAN.md`
 | `scaffold.py` | `sb init` y `sb machine init`: plantillas de `templates/` |
 | `checks.py` | `sb check`: validación de la biblioteca |
 | `doctor.py` | `sb doctor` (dependencias de la máquina) y `sb status` (pendientes) |
+| `ingest/pipeline.py` | `sb ingest`: orquesta los pasos y decide duplicados, re-vinculación y estado |
+| `ingest/extract.py` | PDF → Markdown por página (pymupdf4llm), OCR, título aproximado |
+| `ingest/doi.py` | Encontrar y normalizar DOIs e IDs de arXiv |
+| `ingest/metadata.py` | Crossref y DataCite, con caché en `.cache/http/` |
+| `ingest/dedupe.py` | Índice en memoria por hash, DOI y título |
+| `citekey.py` | Generación de citekeys |
+| `reading.py` | Páginas y secciones de un texto completo |
+| `textutil.py` | Normalización de texto (ASCII, etiquetas HTML, comparación difusa) |
 | `mcp_server.py` | Servidor MCP (fase 6; por ahora es un marcador) |
 | `templates/` | Esqueleto de un repositorio de datos |
 

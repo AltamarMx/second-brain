@@ -39,6 +39,10 @@ class VocabSection(Section):
     project_kind: list[str] = ["tesis", "articulo", "proyecto", "curso", "otro"]
 
 
+class ExtractSection(Section):
+    ocr_languages: list[str] = ["eng", "spa"]  # Tesseract codes; only installed ones are used
+
+
 class FiguresSection(Section):
     describe: bool = True
 
@@ -59,6 +63,7 @@ class LibraryConfig(Section):
     user: UserSection = UserSection()
     library: LibrarySection = LibrarySection()
     vocab: VocabSection = VocabSection()
+    extract: ExtractSection = ExtractSection()
     figures: FiguresSection = FiguresSection()
     access: AccessSection = AccessSection()
     checks: ChecksSection = ChecksSection()

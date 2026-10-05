@@ -10,3 +10,5 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - `sb init`, `sb machine init/show`, `sb doctor`, `sb check`, `sb status`.
 - Esquema de datos versión 1 (`docs/formato-datos.md`).
 - CI con ruff y pytest; hooks de pre-commit locales.
+- Fase 1: `sb ingest` (DOI desde metadatos y texto, validación del título en Crossref/DataCite, búsqueda por título, deduplicación por hash, DOI y título, re-vinculación de PDFs, OCR, caché HTTP), `sb show`, `sb text` (páginas y secciones) y `sb remove`.
+- Configuración `[extract].ocr_languages`.
