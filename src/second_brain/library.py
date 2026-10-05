@@ -152,6 +152,7 @@ class Library:
         return self._read(self.paper_path(citekey), Paper)
 
     def write_paper(self, paper: Paper, body: str = "") -> Path:
+        paper = paper.model_copy(update={"schema_version": SCHEMA_VERSION})
         path = self.paper_path(paper.citekey)
         atomic_write(path, dump_frontmatter(paper, body))
         return path
@@ -168,6 +169,7 @@ class Library:
         return self._read(self.project_path(slug), Project)
 
     def write_project(self, project: Project, body: str = "") -> Path:
+        project = project.model_copy(update={"schema_version": SCHEMA_VERSION})
         path = self.project_path(project.slug)
         atomic_write(path, dump_frontmatter(project, body))
         return path
@@ -204,6 +206,20 @@ class Library:
 
     def iter_figure_sets(self) -> Iterator[Document[FigureSet] | InvalidDocument]:
         return self._iter(self.figures_dir, FigureSet)
+
+    def migrate(self) -> int:
+        """Rewrite every paper and project with the current schema version; return how many changed."""
+        changed = 0
+        for docs, write in (
+            (self.iter_papers(), self.write_paper),
+            (self.iter_projects(), self.write_project),
+        ):
+            for doc in docs:
+                if isinstance(doc, InvalidDocument) or doc.meta.schema_version == SCHEMA_VERSION:
+                    continue
+                write(doc.meta, doc.body)
+                changed += 1
+        return changed
 
     def remove_paper(self, citekey: str) -> list[Path]:
         """Delete the record, its full text and figures. Notes and the PDF are left alone."""

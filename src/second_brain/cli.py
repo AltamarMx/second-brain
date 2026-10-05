@@ -853,6 +853,9 @@ def bib(
         list[str] | None, typer.Option("--project", "-p", help="Artículos de este proyecto.")
     ] = None,
     keys: Annotated[str | None, typer.Option(help="Citekeys separados por comas.")] = None,
+    all_: Annotated[
+        bool, typer.Option("--all", help="Todos los artículos de la biblioteca.")
+    ] = False,
     from_tex: Annotated[
         Path | None, typer.Option(help="Los artículos citados en este .tex.")
     ] = None,
@@ -867,11 +870,15 @@ def bib(
     """Genera BibTeX de un proyecto, de unos citekeys o de lo citado en un .tex."""
     if ctx.invoked_subcommand:
         return
-    if not (project or keys or from_tex):
+    if not (project or keys or from_tex or all_):
         console.print(ctx.get_help())
         raise typer.Exit(0)
     lib = Library(_home(ctx))
-    selected: dict[str, object] = {}
+    papers = {
+        d.meta.citekey: d.meta for d in lib.iter_papers() if not isinstance(d, InvalidDocument)
+    }
+    by_alias = {alias: p for p in papers.values() for alias in p.aliases}
+    selected: list[tuple[str, object]] = []
     missing: list[str] = []
     for slug in project or []:
         try:
@@ -880,25 +887,31 @@ def bib(
             err_console.print(f"[red]✗[/] {escape(str(exc))}")
             raise typer.Exit(1) from exc
         for paper in proj.members(lib, slug):
-            selected[paper.citekey] = paper
+            selected += [(k, paper) for k in (paper.citekey, *paper.aliases)]
+    if all_:
+        selected += [(k, p) for p in papers.values() for k in (p.citekey, *p.aliases)]
     wanted = [k.strip() for k in (keys or "").split(",") if k.strip()]
+    tex_keys: list[str] = []
     if from_tex:
         if not from_tex.expanduser().is_file():
             err_console.print(f"[red]✗[/] no existe {escape(str(from_tex))}")
             raise typer.Exit(2)
-        wanted += cited_keys(from_tex.expanduser())
-    for key in wanted:
-        if key in selected:
-            continue
-        if re.fullmatch(CITEKEY_PATTERN, key) and lib.paper_path(key).is_file():
-            selected[key] = lib.read_paper(key).meta
-        elif key not in missing:
-            missing.append(key)
-    text = bibmod.render(list(selected.values()), fmt)
+        tex_keys = cited_keys(from_tex.expanduser())
+    for key in wanted + tex_keys:
+        paper = papers.get(key) or by_alias.get(key)
+        if paper is None:
+            if key not in missing:
+                missing.append(key)
+        elif key in tex_keys:
+            selected.append((key, paper))  # exactly the key the document cites
+        else:
+            selected += [(k, paper) for k in (paper.citekey, *paper.aliases)]
+    text = bibmod.render([], fmt, keys=selected)
     changed = _write_bib(text, output)
     if output is not None:
         state = "escrito" if changed else "sin cambios"
-        err_console.print(f"[green]✓[/] {len(selected)} entradas → {escape(str(output))} ({state})")
+        count = len({k for k, _ in selected})
+        err_console.print(f"[green]✓[/] {count} entradas → {escape(str(output))} ({state})")
     if missing:
         err_console.print(
             f"[yellow]![/] {len(missing)} citekeys no están en la biblioteca: {escape(', '.join(missing))}"
@@ -931,7 +944,7 @@ def bib_sync(
             failed = True
             continue
         papers = proj.members(lib, slug)
-        changed = _write_bib(bibmod.render(papers, fmt), path)
+        changed = _write_bib(bibmod.render(papers, fmt), path)  # citekeys and their aliases
         mark, state = ("[green]✓[/]", "actualizado") if changed else ("[dim]=[/]", "sin cambios")
         console.print(f"{mark} {slug}: {len(papers)} entradas → {escape(str(path))} ({state})")
     if failed:
@@ -1174,3 +1187,72 @@ def chat(
     sync_agents(home)  # keep rules and skills in step with the installed version
     os.chdir(home)
     os.execvp("claude", ["claude"])
+
+
+# --- import / migrate -------------------------------------------------------------
+
+import_app = typer.Typer(help="Traer una biblioteca existente.", no_args_is_help=True)
+app.add_typer(import_app, name="import")
+
+IMPORT_LABEL = {
+    "imported": ("[green]+[/]", "importados"),
+    "alias": ("[blue]≈[/]", "ya existían (alias agregado)"),
+    "duplicate": ("[dim]=[/]", "ya existían"),
+    "conflict": ("[yellow]![/]", "citekey en conflicto"),
+    "error": ("[red]✗[/]", "errores"),
+}
+
+
+@import_app.command("bib")
+def import_bib_command(
+    ctx: typer.Context,
+    path: Annotated[
+        Path, typer.Argument(help="Archivo .bib (de Zotero, JabRef, Mendeley o a mano).")
+    ],
+    project: Annotated[
+        str | None, typer.Option(help="Asignar todo a un proyecto existente.")
+    ] = None,
+    dry_run: Annotated[bool, typer.Option(help="Mostrar qué pasaría sin escribir nada.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Registra las entradas de un .bib conservando sus citekeys; luego suelta los PDFs en inbox/."""
+    from .import_bib import import_bib
+
+    lib = Library(_home(ctx))
+    if not path.expanduser().is_file():
+        console.print(f"[red]✗[/] no existe {escape(str(path))}")
+        raise typer.Exit(2)
+    if project:
+        try:
+            proj.require_project(lib, project)
+        except proj.ProjectError as exc:
+            raise _project_error(exc) from exc
+    config = load_config(lib.home)
+    client = MetadataClient(lib.cache_dir, email=config.user.email)
+    results = import_bib(lib, client, path.expanduser(), project=project, dry_run=dry_run)
+    if as_json:
+        print(json.dumps([dataclasses.asdict(r) for r in results], ensure_ascii=False, indent=2))
+    else:
+        for r in results:
+            mark, _ = IMPORT_LABEL[r.outcome]
+            target = f" → [bold]{r.citekey}[/]" if r.citekey and r.citekey != r.key else ""
+            note = f"  [dim]{escape(r.message)}[/]" if r.message else ""
+            console.print(f"{mark} {escape(r.key)}{target}{note}")
+        counts = {o: sum(1 for r in results if r.outcome == o) for o in IMPORT_LABEL}
+        summary = " · ".join(f"{n} {IMPORT_LABEL[o][1]}" for o, n in counts.items() if n)
+        console.print(
+            f"\n{'(simulación) ' if dry_run else ''}{summary or 'el .bib no tiene entradas'}"
+        )
+        if counts["imported"] and not dry_run:
+            console.print(
+                "[dim]Ahora suelta sus PDFs en inbox/ y ejecuta sb ingest: cada uno se asocia a su registro.[/]"
+            )
+    if any(r.outcome == "error" for r in results):
+        raise typer.Exit(1)
+
+
+@app.command()
+def migrate(ctx: typer.Context) -> None:
+    """Reescribe artículos y proyectos con la versión actual del esquema de datos."""
+    changed = Library(_home(ctx)).migrate()
+    console.print(f"[green]✓[/] {changed} archivos actualizados al esquema actual")

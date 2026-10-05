@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2: Paper.aliases
 
 CITEKEY_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 SLUG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
@@ -26,6 +26,7 @@ PaperFlag = Literal[
     "retracted",
 ]
 PdfSource = Literal["inbox", "openaccess", "institutional"]
+ALIAS_PATTERN = r"^[^\s,{}%#\\]+$"
 ProjectStatus = Literal["active", "paused", "archived"]
 
 
@@ -98,6 +99,7 @@ class Paper(Model):
     type: str = "article-journal"
     doi: str | None = None
     ids: Ids = Ids()
+    aliases: list[str] = []  # other keys your .tex files use for this paper (from sb import bib)
     title: str
     authors: list[Author] = []
     year: int | None = None

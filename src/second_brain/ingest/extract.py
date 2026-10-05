@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import io
 import subprocess
+import unicodedata
 from dataclasses import dataclass, field
 from functools import cache
 from importlib.metadata import version
@@ -75,7 +76,9 @@ def _title_guess(page: pymupdf.Page, metadata_title: str | None) -> str | None:
                     spans.append((round(span["size"], 1), text))
     if spans:
         largest = max(size for size, _ in spans)
-        title = " ".join(text for size, text in spans if size >= largest - 0.5)
+        title = unicodedata.normalize(
+            "NFKC", " ".join(text for size, text in spans if size >= largest - 0.5)
+        )
         if len(title) >= 15:
             return title[:400]
     if (

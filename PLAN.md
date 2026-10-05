@@ -1057,8 +1057,14 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 5: Traer tu biblioteca existente
 
-- [ ] `sb import bib` (`--dry-run`, `--project`) con citekeys conservados y asociación posterior de PDFs.
-- [ ] Ingesta por partes (`--limit`) de tus PDFs actuales.
+- [x] `sb import bib` (`--dry-run`, `--project`) con citekeys conservados y asociación posterior de PDFs.
+- [x] Ingesta por partes (`--limit`) de tus PDFs actuales.
+
+**Terminada el 2026-10-04**, con el `.bib` de los 14 artículos que ingirió el usuario (`~/Downloads/biblioteca-14.bib`):
+
+- En una biblioteca nueva, `sb import bib` registró las 14 entradas. Al soltar los PDFs, los 14 se asociaron: 13 por DOI y 1 sin DOI por título. El `.bib` que sale después es idéntico al original.
+- Reimportar no duplica nada. Las claves que no sirven como nombre de archivo (estilo Zotero, `Lopez:2019_x`) quedan como alias, y `sb bib` las sigue escribiendo.
+- Esquema de datos 2 (`aliases`) con `sb migrate`.
 
 **Terminado cuando:** todas las entradas de tu `.bib` están en la biblioteca, con su PDF asociado cuando lo hay, y tus `.tex` compilan con `sb bib --from-tex`. Puede adelantarse después de la fase 3, dejando el procesamiento para después.
 
@@ -1248,4 +1254,6 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 | 2026-10-04 | Fase 4 terminada | Procesamiento con `claude -p` (resumen, clasificación, figuras), búsqueda FTS5, skills y `sb chat`; probado de punta a punta |
 
-**Próximo paso:** fase 5 (traer la biblioteca existente con `sb import bib`).
+| 2026-10-04 | Fase 5 terminada | `sb import bib` con alias de citekeys; asociación de PDFs por título; esquema 2 |
+
+**Próximo paso:** fase 6 (LLM local con Ollama, MCP y OpenCode).

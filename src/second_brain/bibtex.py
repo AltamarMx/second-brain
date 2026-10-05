@@ -7,6 +7,7 @@ regenerated ``.bib`` only changes when the records change.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Literal
 
 from pylatexenc.latexencode import unicode_to_latex
@@ -49,7 +50,7 @@ _WORD_CORE = re.compile(r"[\w'’-]+", re.UNICODE)
 
 def encode(text: str, fmt: Format) -> str:
     """BibTeX: everything to LaTeX commands (``{\\'e}``); BibLaTeX: UTF-8, only specials escaped."""
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text)).strip()  # 𝑪𝑶₂ → CO2
     if fmt == "bibtex":
         return unicode_to_latex(text, unknown_char_policy="keep")
     return "".join(_SPECIAL.get(c, c) for c in text)
@@ -108,7 +109,7 @@ def _pages(pages: str | None) -> str | None:
     return re.sub(r"\s*[-–—]+\s*", "--", pages) if pages else None
 
 
-def entry(paper: Paper, fmt: Format = "bibtex") -> str:
+def entry(paper: Paper, fmt: Format = "bibtex", key: str | None = None) -> str:
     types = BIBTEX_TYPES if fmt == "bibtex" else BIBLATEX_TYPES
     kind = types.get(paper.type, "misc")
     container = encode(paper.container_title, fmt) if paper.container_title else None
@@ -145,13 +146,23 @@ def entry(paper: Paper, fmt: Format = "bibtex") -> str:
     if paper.ids.arxiv and fmt == "biblatex":
         fields += [("eprint", paper.ids.arxiv), ("eprinttype", "arxiv")]
     body = ",\n".join(f"  {name} = {{{value}}}" for name, value in fields if value)
-    return f"@{kind}{{{paper.citekey},\n{body}\n}}\n"
+    return f"@{kind}{{{key or paper.citekey},\n{body}\n}}\n"
 
 
-def render(papers: list[Paper], fmt: Format = "bibtex") -> str:
+def render(
+    papers: list[Paper], fmt: Format = "bibtex", keys: list[tuple[str, Paper]] | None = None
+) -> str:
+    """Entries for ``papers`` (each under its citekey and its aliases), or exactly ``keys``."""
     header = (
         f"% Generado por second-brain {__version__} ({fmt}). No lo edites a mano: "
         "se regenera con sb bib.\n"
     )
-    entries = [entry(p, fmt) for p in sorted(papers, key=lambda p: p.citekey)]
+    if keys is None:
+        keys = [(k, p) for p in papers for k in (p.citekey, *p.aliases)]
+    unique = {key: paper for key, paper in keys}
+    entries = []
+    for key in sorted(unique, key=str.lower):
+        paper = unique[key]
+        note = f"% alias de {paper.citekey}\n" if key != paper.citekey else ""
+        entries.append(note + entry(paper, fmt, key))
     return header + "".join(f"\n{e}" for e in entries)

@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from conftest import make_paper, make_project
 
@@ -47,7 +49,7 @@ def test_atomic_write_leaves_no_temp_files(lib):
 def test_newer_schema_is_refused(lib):
     lib.write_paper(make_paper())
     path = lib.paper_path("garcia2021thermal")
-    path.write_text(path.read_text().replace("schema_version: 1", "schema_version: 99"))
+    path.write_text(re.sub(r"schema_version: \d+", "schema_version: 99", path.read_text()))
     with pytest.raises(NewerSchemaError):
         lib.read_paper("garcia2021thermal")
 

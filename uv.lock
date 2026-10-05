@@ -34,6 +34,18 @@ wheels = [
 ]
 
 [[package]]
+name = "bibtexparser"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pylatexenc" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/40/bb/38f8b2ee3e3da9161fb4a845fb04b4ccb0b8d5a5f5e25aaea39154073532/bibtexparser-2.1.0.tar.gz", hash = "sha256:9f48851eef4693cb7ef6897f7628966c5d0ef49b6403b13a862679a4c313d176", size = 88630, upload-time = "2026-10-02T16:11:35.234Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/df/b0898588ad7c1a1c1cb50dcf1afbac1b656ad1ce5373c895b49138b00894/bibtexparser-2.1.0-py3-none-any.whl", hash = "sha256:3b4b1de50ce45ee9091ccca72e1efc8732ab3ef615b70bcecc537c17cd84753e", size = 50128, upload-time = "2026-10-02T16:11:34.111Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.7.22"
 source = { registry = "https://pypi.org/simple" }
@@ -526,6 +538,7 @@ name = "second-brain"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "bibtexparser" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pylatexenc" },
@@ -544,6 +557,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bibtexparser", specifier = ">=2.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pylatexenc", specifier = ">=2.11" },

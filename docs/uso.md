@@ -49,6 +49,9 @@ uv run sb doctor
 | `sb index update/rebuild` | Índice de búsqueda (se actualiza solo) |
 | `sb agents sync` | Instala o actualiza `AGENTS.md`, skills y `.claude/settings.json` |
 | `sb chat [claude]` | Abre Claude Code en la biblioteca |
+| `sb import bib ARCHIVO.bib [--project P] [--dry-run]` | Registra las entradas de un `.bib` existente, conservando sus citekeys |
+| `sb bib --all` | BibTeX de toda la biblioteca |
+| `sb migrate` | Actualiza los archivos a la versión actual del esquema |
 | `sb remove KEY [--delete-pdf] [--yes]` | Elimina un artículo (el PDF pasa a `inbox/_eliminados/`) |
 
 Opciones globales: `--home RUTA` (o la variable `SB_HOME`) y `--version`.
@@ -152,6 +155,20 @@ uv run sb chat
 Abre Claude Code en la carpeta de la biblioteca con sus reglas (`AGENTS.md`: responder solo con lo que hay en la biblioteca, siempre con `[citekey, p. N]`) y cuatro skills: `sb-ingerir`, `sb-consultar`, `sb-proyectos` y `sb-bibtex`. La primera vez, Claude Code pide confiar en la carpeta: acéptalo para que pueda usar `uv run sb` sin preguntar.
 
 Ejemplos: "¿qué artículos tengo sobre confort adaptativo en México?", "¿qué temperatura de confort reporta lopezperez2019adaptive?", "crea un proyecto para mi artículo sobre X con lo que encaje y dame el bib".
+
+## Traer una biblioteca existente
+
+```bash
+uv run sb import bib mi-biblioteca.bib --dry-run   # qué pasaría
+uv run sb import bib mi-biblioteca.bib             # un registro por entrada, esperando PDF
+cp carpeta-con-pdfs/*.pdf inbox/ && uv run sb ingest   # cada PDF se asocia a su registro
+```
+
+- Sirve cualquier `.bib` (Zotero, JabRef, Mendeley o escrito a mano). Con DOI, los metadatos se toman de Crossref; sin DOI, del `.bib`. Los `keywords` pasan a `tags`.
+- **Se conservan los citekeys** para que tus `.tex` sigan compilando. Si una clave no sirve como nombre de archivo (`Lopez:2019_x`, `Garcia2021` con mayúsculas), el artículo recibe un citekey válido (`lopez-2019-x`) y la clave original queda como **alias**. `sb bib` escribe la entrada con las dos claves, y `--from-tex` con la que cite el documento.
+- Si el artículo ya estaba en la biblioteca con otra clave, se agrega esa clave como alias.
+- Los PDFs se asocian por DOI o, si no tienen, por título, año y primer autor.
+- Por proyectos: exporta un `.bib` por grupo o colección e impórtalo con `--project`.
 
 ## Usar `sb` desde otra carpeta
 

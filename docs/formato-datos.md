@@ -2,7 +2,7 @@
 
 Este documento es el **contrato** entre el código y los datos de una biblioteca. La implementación vive en `src/second_brain/models.py` (archivos de `library/`), `config.py` (`config.toml`) y `machines.py` (`machines/*.toml`). Todo cambio en esos módulos actualiza este documento en el mismo commit.
 
-Versión del esquema: **1**.
+Versión del esquema: **2** (la 2 agregó `aliases` a los artículos; `sb migrate` actualiza los archivos de la versión 1, que se siguen leyendo).
 
 ## Reglas generales
 
@@ -45,6 +45,7 @@ Versión del esquema: **1**.
 | `type` | texto | Tipo CSL: `article-journal`, `paper-conference`, `chapter`, `book`, `thesis`, `report`… |
 | `doi` | texto o null | |
 | `ids` | mapa | `arxiv`, `isbn`, `openalex` (texto o null) |
+| `aliases` | lista de texto | Otras claves con las que tus `.tex` citan este artículo (de `sb import bib`). `sb bib` también escribe la entrada con cada alias. Únicos en la biblioteca y distintos de cualquier citekey |
 | `title` | texto | Obligatorio |
 | `authors` | lista | Cada autor: `family` (obligatorio), `given`, `orcid` |
 | `year` | entero o null | |

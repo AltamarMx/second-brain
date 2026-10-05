@@ -219,11 +219,15 @@ class Ingestor:
         if doi and (match := self.index.find_by_doi(doi)):
             return self._known_doi(path, match, sha, extraction, result, source)
 
+        family = (resolved.fields.get("authors") or [{}])[0].get("family")
+        similar = self._similar(resolved, family)
+        if similar and self.index.papers[similar].pdf is None:
+            # a record without PDF (from sb import bib or a DOI) with the same title: attach to it
+            return self._known_doi(path, similar, sha, extraction, result, source)
+
         flags = list(resolved.flags)
         if extraction.ocr:
             flags.append("ocr")
-        family = (resolved.fields.get("authors") or [{}])[0].get("family")
-        similar = self._similar(resolved, family)
         if similar:
             flags.append("possible_duplicate")
         citekey = make_citekey(

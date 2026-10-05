@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tomllib
 from dataclasses import dataclass, field
@@ -15,6 +16,7 @@ from .config import CONFIG_FILENAME, LibraryConfig, load_config
 from .ingest.doi import normalize_doi
 from .library import InvalidDocument, Library
 from .machines import MACHINES_DIRNAME, MachineProfile
+from .models import ALIAS_PATTERN
 
 Level = Literal["error", "warning"]
 SKIP_SIZE_DIRS = {".git", ".venv", ".cache", "inbox", "pdfs", "logs"}
@@ -142,6 +144,7 @@ def _check_papers(
 ) -> set[str]:
     citekeys: set[str] = set()
     dois: dict[str, Path] = {}
+    aliases: dict[str, str] = {}
     for doc in lib.iter_papers():
         if isinstance(doc, InvalidDocument):
             _invalid(doc, report, lib.home)
@@ -169,9 +172,28 @@ def _check_papers(
             report.add(
                 "error", doc.path, f"study_type '{study}' no está en [vocab].study_type", lib.home
             )
+        for alias in paper.aliases:
+            if not re.fullmatch(ALIAS_PATTERN, alias):
+                report.add("error", doc.path, f"alias inválido: {alias!r}", lib.home)
+            elif alias in aliases:
+                report.add(
+                    "error",
+                    doc.path,
+                    f"el alias '{alias}' también es de {aliases[alias]}",
+                    lib.home,
+                )
+            aliases[alias] = paper.citekey
         for slug in paper.projects:
             if slug not in projects:
                 report.add("error", doc.path, f"el proyecto '{slug}' no existe", lib.home)
+    for alias, owner in aliases.items():
+        if alias in citekeys:
+            report.add(
+                "error",
+                lib.paper_path(owner),
+                f"el alias '{alias}' es el citekey de otro artículo",
+                lib.home,
+            )
     return citekeys
 
 

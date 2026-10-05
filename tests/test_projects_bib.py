@@ -230,3 +230,10 @@ def test_bib_sync_and_check_warning(lib, tmp_path):
     assert result.exit_code == 1 and "fantasma" in result.output
     warnings = [i.message for i in run_checks(lib.home).issues if i.level == "warning"]
     assert any("fantasma" in w for w in warnings)
+
+
+def test_math_alphanumerics_are_plain_letters():
+    assert (
+        bibtex.protect_title("Monitor de 𝑪𝑶₂ para interiores", "bibtex")
+        == "Monitor de {CO2} para interiores"
+    )
