@@ -1086,8 +1086,20 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 7: Búsqueda semántica
 
-- [ ] Embeddings locales multilingües + `sqlite-vec`; búsqueda híbrida (RRF).
-- [ ] Conjunto de evaluación: 20–30 preguntas con su artículo esperado; medir recall@5 antes y después.
+- [x] Embeddings locales multilingües + `sqlite-vec`; búsqueda híbrida (RRF).
+- [x] Conjunto de evaluación: 20–30 preguntas con su artículo esperado; medir recall@5 antes y después.
+
+**Terminada el 2026-10-04.** Embeddings con model2vec (`potion-multilingual-128M`): sin servidor, con solo numpy, sobre Intel y Apple Silicon. Vectores en el mismo índice y similitud con numpy (no hizo falta `sqlite-vec`). Ollama queda como alternativa.
+
+Evaluación con 24 preguntas (la mitad en español, parafraseadas) sobre 18 artículos procesados:
+
+| Modo | recall@1 | recall@5 | MRR |
+|---|---|---|---|
+| Solo palabras (BM25) | 0.71 | 0.92 | 0.80 |
+| Solo significado | 0.75 | 0.96 | 0.85 |
+| Híbrido (por defecto) | 0.79 | 0.92 | 0.85 |
+
+Con los resúmenes en español la búsqueda por palabras ya era buena. Los embeddings rescatan las preguntas en español sobre artículos en inglés (p. ej., "zona de confort para viviendas en Japón": lugar 13 con palabras, lugar 1 por significado). Las diferencias son de una o dos preguntas: hay que repetir la evaluación con más artículos antes de afinar los pesos (`index.WEIGHTS`).
 
 **Terminado cuando:** el recall@5 mejora respecto a BM25 solo, sobre todo en preguntas en español.
 
@@ -1265,4 +1277,6 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 | 2026-10-04 | Fase 6 (iMac) | Ollama y API de Anthropic como backends, `sb ask`, servidor MCP, OpenCode preparado; la prioridad es Claude; OpenCode pendiente de probar en la M5 |
 
-**Próximo paso:** fase 7 (búsqueda semántica) o volver a la descarga por DOI (pendiente).
+| 2026-10-04 | Fase 7 terminada | Búsqueda híbrida con embeddings locales (model2vec); `sb eval search`; recall@1 0.71 → 0.79 |
+
+**Próximo paso:** fase 8 (extras) o retomar la descarga por DOI (pendiente).

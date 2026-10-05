@@ -16,4 +16,6 @@ Perfiles probados y tiempos medidos. Se completa en la fase 6.
 | `imac` | `sb ask` sobre 3 artículos | `claude` | ~11 s |
 | `imac` | `sb ask` sobre 3 artículos | `ollama` (gemma4, 8B Q4, solo CPU) | ~5 min |
 
+| `imac` | Reconstruir el índice con embeddings (18 artículos) | model2vec | ~5 s (la primera vez, más ~30 s de descarga del modelo) |
+
 El modelo local funciona en el iMac pero es lento; para el uso diario en esta máquina conviene Claude. En la M5 queda pendiente medir y probar OpenCode.

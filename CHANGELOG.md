@@ -17,6 +17,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - Fase 4: `sb process` (resumen, clasificación y figuras con `claude -p` y salida validada por esquema; procedencia; respeta ediciones a mano; `--pending`, `--stale`, `--force`) y procesamiento automático al ingerir; `sb figures`; índice FTS5 con `sb search`, `sb list`, `sb passages`, `sb index`; `AGENTS.md`, skills `sb-*`, `.claude/settings.json` con `sb agents sync` (también en `sb init`); `sb chat`.
 - Fase 5: `sb import bib` (cualquier `.bib`; conserva citekeys, alias para claves no válidas como archivo, metadatos de Crossref si hay DOI); los PDFs se asocian a registros sin PDF también por título; `sb bib --all`; `sb migrate`.
 - Fase 6: backends `ollama` (local) y `anthropic` (API, extra opcional); `sb ask`; servidor MCP `sb-mcp`; `opencode.json` y agente `bibliotecario`; `sb chat opencode`.
+- Fase 7: búsqueda híbrida (BM25 + embeddings multilingües locales con model2vec u Ollama, fusionados con RRF) en `sb search`, `sb passages`, `sb ask` y MCP; `--mode`; `sb eval search` (recall@k y MRR).
 
 ### Cambiado
 

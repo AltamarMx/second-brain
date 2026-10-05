@@ -120,7 +120,7 @@ En el artículo, `figures` cuenta las figuras descritas y `provenance.figures` r
 | `[process]` | `backend`: `claude`, `ollama`, `anthropic` o `none` |
 | `[llm]` | `provider`, `model`, `num_ctx` |
 | `[chat]` | `agent`: `claude` u `opencode` |
-| `[embeddings]` | `model` |
+| `[embeddings]` | `provider` (`model2vec`, `ollama` o `none`), `model` |
 | `[bib_outputs]` | `slug-del-proyecto = "ruta/al/archivo.bib"` |
 
 El perfil activo es `SB_MACHINE` o, si no está definida, el nombre local de la computadora (`scutil --get LocalHostName`) en minúsculas y con guiones.

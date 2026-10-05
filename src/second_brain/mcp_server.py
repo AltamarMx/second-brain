@@ -17,7 +17,7 @@ from . import bibtex
 from . import projects as proj
 from .config import find_home, load_config
 from .doctor import library_status as status_of
-from .index import Filters, SearchIndex
+from .index import Filters, open_index
 from .library import InvalidDocument, Library
 from .processing import one_sentence
 from .reading import select_pages, select_section
@@ -54,7 +54,7 @@ def build_server(home: Path | None = None) -> MCPServer:
         """Artículos sobre un tema. Filtros: country (ISO, p. ej. MX), study_type (experimental,
         numerico, ambos, teorico, revision), project (slug), years ("2019", "2015..2024").
         Busca también con los términos en inglés."""
-        hits = SearchIndex(lib).search(
+        hits = open_index(lib).search(
             query, filters(project, study_type, country, years=years), limit
         )
         return [dataclasses.asdict(h) for h in hits]
@@ -65,7 +65,9 @@ def build_server(home: Path | None = None) -> MCPServer:
         years: str | None = None,
     ) -> list[dict[str, Any]]:  # fmt: skip
         """Artículos que cumplen filtros, sin tema (útil para contar)."""
-        hits = SearchIndex(lib).list(filters(project, study_type, country, years=years))
+        hits = open_index(lib, semantic=False).list(
+            filters(project, study_type, country, years=years)
+        )
         return [
             {"citekey": h.citekey, "title": h.title, "year": h.year, "places": h.places}
             for h in hits
@@ -77,7 +79,7 @@ def build_server(home: Path | None = None) -> MCPServer:
     ) -> list[dict[str, Any]]:
         """Pasajes del texto completo y de las figuras que responden a la consulta, con página y sección.
         Con paper=citekey busca solo en ese artículo."""
-        found = SearchIndex(lib).passages(query, Filters(), paper=paper, limit=limit)
+        found = open_index(lib).passages(query, Filters(), paper=paper, limit=limit)
         return [dataclasses.asdict(p) for p in found]
 
     @server.tool()

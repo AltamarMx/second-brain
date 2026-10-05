@@ -27,7 +27,7 @@ from .checks import run_checks
 from .config import HomeNotFoundError, find_home, load_config, load_env
 from .doctor import library_status, run_doctor
 from .fetch.download import Fetcher
-from .index import Filters, SearchIndex
+from .index import Filters, Mode, SearchIndex, open_index
 from .ingest.doi import DOI_RE, normalize_doi
 from .ingest.metadata import MetadataClient
 from .ingest.pipeline import IngestError, IngestOptions, Ingestor, IngestResult, LockedError
@@ -1029,6 +1029,16 @@ StatusOpt = Annotated[
     str | None, typer.Option(help="Estado del registro (needs_review, processed…).")
 ]
 JsonOpt = Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")]
+ModeOpt = Annotated[Mode, typer.Option(help="hybrid (significado + palabras), semantic o lexical.")]
+
+
+def _index(lib: Library, mode: str) -> SearchIndex:
+    return open_index(lib, semantic=mode != "lexical")
+
+
+def _index_warning(index: SearchIndex, as_json: bool) -> None:
+    if index.warning and not as_json:
+        err_console.print(f"[yellow]![/] {escape(index.warning)}")
 
 
 def _filters(project, study, country, region, locality, year, status=None) -> Filters:
@@ -1062,13 +1072,16 @@ def search(
     project: ProjectOpt = None, study: StudyOpt = None, country: CountryOpt = None,
     region: RegionOpt = None, locality: LocalityOpt = None, year: YearOpt = None,
     limit: Annotated[int, typer.Option(min=1, help="Máximo de artículos.")] = 10,
+    mode: ModeOpt = "hybrid",
     as_json: JsonOpt = False,
 ) -> None:  # fmt: skip
-    """Busca artículos por tema en metadatos, resúmenes, texto completo y figuras."""
+    """Busca artículos por tema (por significado y por palabras) en metadatos, resúmenes, texto y figuras."""
     lib = Library(_home(ctx))
-    hits = SearchIndex(lib).search(
-        query, _filters(project, study, country, region, locality, year), limit
+    index = _index(lib, mode)
+    hits = index.search(
+        query, _filters(project, study, country, region, locality, year), limit, mode
     )
+    _index_warning(index, as_json)
     if as_json:
         print(json.dumps([dataclasses.asdict(h) for h in hits], ensure_ascii=False, indent=2))
     else:
@@ -1084,7 +1097,9 @@ def list_papers(
 ) -> None:  # fmt: skip
     """Lista artículos con filtros (sin tema). Con --json, útil para contar."""
     lib = Library(_home(ctx))
-    hits = SearchIndex(lib).list(_filters(project, study, country, region, locality, year, status))
+    hits = open_index(lib, semantic=False).list(
+        _filters(project, study, country, region, locality, year, status)
+    )
     if as_json:
         print(json.dumps([dataclasses.asdict(h) for h in hits], ensure_ascii=False, indent=2))
         return
@@ -1100,17 +1115,21 @@ def passages(
     limit: Annotated[int, typer.Option(min=1, help="Máximo de pasajes.")] = 8,
     refs: Annotated[bool, typer.Option(help="Incluir la lista de referencias.")] = False,
     project: ProjectOpt = None, study: StudyOpt = None, country: CountryOpt = None,
+    mode: ModeOpt = "hybrid",
     as_json: JsonOpt = False,
 ) -> None:  # fmt: skip
     """Pasajes del texto completo (y figuras) que responden a una consulta, con página y sección."""
     lib = Library(_home(ctx))
-    found = SearchIndex(lib).passages(
+    index = _index(lib, mode)
+    found = index.passages(
         query,
         _filters(project, study, country, None, None, None),
         paper=paper,
         limit=limit,
         include_refs=refs,
+        mode=mode,
     )
+    _index_warning(index, as_json)
     if as_json:
         print(json.dumps([dataclasses.asdict(p) for p in found], ensure_ascii=False, indent=2))
         return
@@ -1136,14 +1155,18 @@ app.add_typer(index_app, name="index")
 @index_app.command("update")
 def index_update(ctx: typer.Context) -> None:
     """Actualiza el índice con lo que cambió."""
-    changed = SearchIndex(Library(_home(ctx))).update()
+    index = open_index(Library(_home(ctx)))
+    changed = index.update()
+    _index_warning(index, False)
     console.print(f"[green]✓[/] {changed} artículos reindexados")
 
 
 @index_app.command("rebuild")
 def index_rebuild(ctx: typer.Context) -> None:
     """Reconstruye el índice desde cero."""
-    count = SearchIndex(Library(_home(ctx))).rebuild()
+    index = open_index(Library(_home(ctx)))
+    count = index.rebuild()
+    _index_warning(index, False)
     console.print(f"[green]✓[/] índice reconstruido: {count} artículos")
 
 
@@ -1354,3 +1377,47 @@ def ask(
     console.print(escape(answer.answer))
     cited = ", ".join(answer.citekeys) or "ninguno"
     console.print(f"\n[dim]Artículos citados: {escape(cited)} · modelo: {escape(answer.model)}[/]")
+
+
+eval_app = typer.Typer(help="Evaluaciones de la búsqueda.", no_args_is_help=True)
+app.add_typer(eval_app, name="eval")
+
+
+@eval_app.command("search")
+def eval_search(
+    ctx: typer.Context,
+    path: Annotated[
+        Path, typer.Argument(help='JSONL: {"q": "pregunta", "expected": "citekey"} por línea.')
+    ],
+    k: Annotated[int, typer.Option(help="Corte para recall@k.")] = 5,
+    as_json: JsonOpt = False,
+) -> None:
+    """Mide recall@1, recall@k y MRR de la búsqueda en modo lexical, semantic y hybrid."""
+    lib = Library(_home(ctx))
+    cases = [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+    index = open_index(lib)
+    modes = ["lexical"] + (["semantic", "hybrid"] if index.semantic else [])
+    report = {}
+    for mode in modes:
+        ranks = []
+        for case in cases:
+            keys = [h.citekey for h in index.search(case["q"], Filters(), limit=20, mode=mode)]
+            ranks.append(keys.index(case["expected"]) + 1 if case["expected"] in keys else None)
+        found = [r for r in ranks if r]
+        report[mode] = {
+            "recall@1": sum(1 for r in found if r == 1) / len(cases),
+            f"recall@{k}": sum(1 for r in found if r <= k) / len(cases),
+            "mrr": sum(1 / r for r in found) / len(cases),
+            "misses": [c["q"] for c, r in zip(cases, ranks, strict=True) if not r or r > k],
+        }
+    if as_json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
+    _index_warning(index, False)
+    console.print(f"{len(cases)} preguntas")
+    for mode, row in report.items():
+        console.print(
+            f"[bold]{mode:9}[/] recall@1 {row['recall@1']:.2f} · recall@{k} {row[f'recall@{k}']:.2f} · MRR {row['mrr']:.2f}"
+        )

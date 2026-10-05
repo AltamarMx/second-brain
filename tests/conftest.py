@@ -12,6 +12,8 @@ from second_brain.scaffold import init_library
 def isolated_env(monkeypatch):
     monkeypatch.delenv("SB_HOME", raising=False)
     monkeypatch.setenv("SB_MACHINE", "test-machine")
+    # never download a real embedding model in tests; semantic tests inject FakeEmbedder
+    monkeypatch.setattr("second_brain.embeddings.get_embedder", lambda profile: None)
 
 
 @pytest.fixture

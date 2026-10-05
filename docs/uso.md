@@ -145,7 +145,18 @@ uv run sb list --project tesis-doctoral --year 2015..
 uv run sb passages "temperatura de confort" --paper lopezperez2019adaptive
 ```
 
-Filtros: `--project`, `--study`, `--country` (código ISO), `--region`, `--locality`, `--year` (`2019`, `2015..2024`, `2015..`, `..2020`); `sb list` acepta también `--status`. La búsqueda es léxica (BM25): conviene probar los términos en inglés. El índice vive en `.cache/index.sqlite` y se actualiza solo.
+Filtros: `--project`, `--study`, `--country` (código ISO), `--region`, `--locality`, `--year` (`2019`, `2015..2024`, `2015..`, `..2020`); `sb list` acepta también `--status`.
+
+La búsqueda es **híbrida**: combina palabras (BM25) y significado (embeddings), así que una pregunta en español encuentra artículos en inglés y sinónimos. `--mode lexical` o `--mode semantic` fuerzan una sola. El índice vive en `.cache/index.sqlite` y se actualiza solo.
+
+Los embeddings se calculan en tu máquina con model2vec (modelo `minishlab/potion-multilingual-128M`, descargado una vez a la caché de Hugging Face). No hace falta servidor ni internet después de la descarga, y no se envía texto a ningún servicio. Se configuran en el perfil de la máquina:
+
+```toml
+[embeddings]
+provider = "model2vec"   # model2vec (sin servidor) | ollama | none
+```
+
+Para medir la calidad de la búsqueda con tus propias preguntas: `uv run sb eval search preguntas.jsonl`, con una línea `{"q": "…", "expected": "citekey"}` por pregunta.
 
 ## Conversar: `sb chat`
 

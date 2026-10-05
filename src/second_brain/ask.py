@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .backends import Backend
-from .index import Filters, Passage, SearchIndex
+from .index import Filters, Passage, open_index
 from .library import Library
 
 MAX_PAPERS = 5
@@ -50,7 +50,7 @@ def gather(
     lib: Library, question: str, filters: Filters, paper: str | None = None
 ) -> tuple[str, list[dict]]:
     """The context sent to the model, and the list of sources it came from."""
-    index = SearchIndex(lib)
+    index = open_index(lib)
     sources: list[dict] = []
     blocks: list[str] = []
     hits = [] if paper else index.search(question, filters, limit=MAX_PAPERS)

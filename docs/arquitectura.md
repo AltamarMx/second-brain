@@ -33,7 +33,8 @@ Para quien modifique el código. El porqué de cada decisión está en `PLAN.md`
 | `backends/` | Quién procesa: `claude_cli.py` (`claude -p` con `--json-schema`), `ollama.py` (API nativa con `format`), `anthropic_api.py` (SDK con salida estructurada) |
 | `ask.py` | `sb ask`: recuperación + prompt mínimo |
 | `prompts/` | Prompts versionados (`process.v1.md`, `figures.v1.md`) |
-| `index.py` | Índice SQLite FTS5: artículos y pasajes (texto y figuras), filtros, búsqueda con RRF |
+| `index.py` | Índice SQLite: FTS5 (BM25) y vectores (numpy), artículos y pasajes (texto y figuras), filtros, búsqueda híbrida con RRF |
+| `embeddings.py` | Embeddings: model2vec (en proceso) u Ollama |
 | `agents.py` | `sb agents sync`: plantillas de `templates/agents/` hacia la biblioteca |
 | `import_bib.py` | `sb import bib`: leer un `.bib` (bibtexparser + pylatexenc), alias, duplicados |
 | `citekey.py` | Generación de citekeys |

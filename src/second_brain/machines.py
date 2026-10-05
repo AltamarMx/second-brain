@@ -45,7 +45,8 @@ class ChatSection(Section):
 
 
 class EmbeddingsSection(Section):
-    model: str | None = None
+    provider: Literal["model2vec", "ollama", "none"] = "model2vec"
+    model: str | None = None  # model2vec default: minishlab/potion-multilingual-128M
 
 
 class MachineProfile(Section):

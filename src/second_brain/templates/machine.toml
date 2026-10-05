@@ -12,8 +12,9 @@ num_ctx = 32768
 [chat]
 agent = "$agent"                        # agente que abre `sb chat` sin argumentos: claude | opencode
 
-[embeddings]
-# model = "NOMBRE-DEL-MODELO-DE-EMBEDDINGS"
+[embeddings]                            # búsqueda semántica (sb search, passages, ask)
+provider = "model2vec"                  # model2vec (sin servidor) | ollama | none
+# model = "minishlab/potion-multilingual-128M"
 
 [bib_outputs]                           # dónde escribe `sb bib sync` en esta máquina
 # tesis-doctoral = "~/Documents/tesis/refs.bib"

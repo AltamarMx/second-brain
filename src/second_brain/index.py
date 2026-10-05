@@ -13,13 +13,17 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
+import numpy as np
+
+from .embeddings import Embedder, EmbeddingError
 from .library import InvalidDocument, Library
 from .models import Paper
 from .processing import one_sentence
 from .reading import KNOWN_RE, NUMBERED_RE, split_pages
 
-INDEX_VERSION = "1"
+INDEX_VERSION = "2"  # 2: vectors
 CHUNK_WORDS = 350
 TOKENIZER = "porter unicode61 remove_diacritics 2"
 REFERENCES_RE = re.compile(r"^(references|referencias|bibliograf\w*)$", re.IGNORECASE)
@@ -46,6 +50,8 @@ CREATE TABLE IF NOT EXISTS chunks (
     section TEXT, kind TEXT, text TEXT
 );
 CREATE INDEX IF NOT EXISTS chunks_citekey ON chunks (citekey);
+CREATE TABLE IF NOT EXISTS vectors (chunk_id INTEGER PRIMARY KEY, vec BLOB);
+CREATE TABLE IF NOT EXISTS paper_vectors (citekey TEXT PRIMARY KEY, vec BLOB);
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text, context, tokenize = '{TOKENIZER}'
 );
@@ -161,10 +167,33 @@ def chunk_fulltext(body: str, title: str) -> list[tuple[int, int, str, str, str]
     return chunks
 
 
+Mode = Literal["lexical", "semantic", "hybrid"]
+RRF_K = 60
+# Weight of each ranked list in hybrid search (paper-level and passage-level, lexical and semantic)
+WEIGHTS = {
+    "lexical_paper": 1.0,
+    "semantic_paper": 1.0,
+    "lexical_chunks": 0.7,
+    "semantic_chunks": 0.7,
+}
+
+
+def _rrf(rankings: list[list], weights: list[float] | None = None) -> dict:
+    """Reciprocal Rank Fusion of several ranked lists of keys."""
+    fused: dict = {}
+    for ranking, weight in zip(rankings, weights or [1.0] * len(rankings), strict=True):
+        for rank, key in enumerate(ranking):
+            fused[key] = fused.get(key, 0.0) + weight / (RRF_K + rank)
+    return fused
+
+
 class SearchIndex:
-    def __init__(self, lib: Library):
+    def __init__(self, lib: Library, embedder: Embedder | None = None):
         self.lib = lib
         self.path = lib.cache_dir / "index.sqlite"
+        self.embedder = embedder
+        self.warning: str | None = None
+        self._cache: dict[str, tuple[list, np.ndarray]] = {}
 
     def connect(self) -> sqlite3.Connection:
         self.lib.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -182,6 +211,10 @@ class SearchIndex:
             db.execute("INSERT INTO meta VALUES ('version', ?)", (INDEX_VERSION,))
             db.commit()
         return db
+
+    @property
+    def semantic(self) -> bool:
+        return self.embedder is not None
 
     # --- building -------------------------------------------------------------
 
@@ -213,6 +246,12 @@ class SearchIndex:
             self._remove(db, key)
             db.execute("DELETE FROM files WHERE citekey = ?", (key,))
             changed += 1
+        if self.embedder is not None:
+            try:
+                self._embed_missing(db)
+            except EmbeddingError as exc:
+                self.warning = f"{exc}; búsqueda solo por palabras"
+                self.embedder = None
         db.commit()
         db.close()
         return changed
@@ -220,9 +259,52 @@ class SearchIndex:
     def _remove(self, db: sqlite3.Connection, key: str) -> None:
         db.execute("DELETE FROM papers WHERE citekey = ?", (key,))
         db.execute("DELETE FROM papers_fts WHERE citekey = ?", (key,))
+        db.execute("DELETE FROM paper_vectors WHERE citekey = ?", (key,))
         ids = [row[0] for row in db.execute("SELECT id FROM chunks WHERE citekey = ?", (key,))]
         db.executemany("DELETE FROM chunks_fts WHERE rowid = ?", [(i,) for i in ids])
+        db.executemany("DELETE FROM vectors WHERE chunk_id = ?", [(i,) for i in ids])
         db.execute("DELETE FROM chunks WHERE citekey = ?", (key,))
+        self._cache.clear()
+
+    def _embed_missing(self, db: sqlite3.Connection) -> None:
+        stored = db.execute("SELECT value FROM meta WHERE key = 'embedder'").fetchone()
+        if stored is None or stored[0] != self.embedder.id:  # other model: start over
+            db.execute("DELETE FROM vectors")
+            db.execute("DELETE FROM paper_vectors")
+            db.execute("INSERT OR REPLACE INTO meta VALUES ('embedder', ?)", (self.embedder.id,))
+        chunks = db.execute(
+            """SELECT c.id, c.text, c.section, p.title FROM chunks c JOIN papers p ON p.citekey = c.citekey
+               LEFT JOIN vectors v ON v.chunk_id = c.id WHERE v.chunk_id IS NULL AND c.kind != 'refs'"""
+        ).fetchall()
+        if chunks:
+            texts = [f"{r['title']} | {r['section']}\n{r['text']}" for r in chunks]
+            vectors = self.embedder.embed(texts)
+            db.executemany(
+                "INSERT INTO vectors VALUES (?, ?)",
+                [
+                    (r["id"], v.astype(np.float32).tobytes())
+                    for r, v in zip(chunks, vectors, strict=True)
+                ],
+            )
+        papers = db.execute(
+            """SELECT f.citekey, f.title, f.abstract, f.summary, f.keywords FROM papers_fts f
+               LEFT JOIN paper_vectors v ON v.citekey = f.citekey WHERE v.citekey IS NULL"""
+        ).fetchall()
+        if papers:
+            texts = [
+                f"{r['title']}\n{r['keywords']}\n{(r['summary'] or '')[:2000]}\n{(r['abstract'] or '')[:1500]}"
+                for r in papers
+            ]
+            vectors = self.embedder.embed(texts)
+            db.executemany(
+                "INSERT INTO paper_vectors VALUES (?, ?)",
+                [
+                    (r["citekey"], v.astype(np.float32).tobytes())
+                    for r, v in zip(papers, vectors, strict=True)
+                ],
+            )
+        if chunks or papers:
+            self._cache.clear()
 
     def _add(self, db: sqlite3.Connection, paper: Paper, summary: str) -> None:
         locations = paper.classification.locations
@@ -278,10 +360,7 @@ class SearchIndex:
         if filters.project:
             clauses.append(f"(' ' || {alias}.projects || ' ') LIKE ?")
             params.append(f"% {filters.project} %")
-        for column, value in (
-            ("study_type", filters.study),
-            ("status", filters.status),
-        ):
+        for column, value in (("study_type", filters.study), ("status", filters.status)):
             if value:
                 clauses.append(f"{alias}.{column} = ?")
                 params.append(value)
@@ -301,6 +380,61 @@ class SearchIndex:
             params.append(filters.year_to)
         return (" AND ".join(clauses) or "1"), params
 
+    def _allowed(self, db: sqlite3.Connection, filters: Filters) -> set[str]:
+        where, params = self._where(filters)
+        return {r[0] for r in db.execute(f"SELECT citekey FROM papers p WHERE {where}", params)}
+
+    def _matrix(self, db: sqlite3.Connection, table: str) -> tuple[list, np.ndarray]:
+        if table not in self._cache:
+            if table == "vectors":
+                rows = db.execute(
+                    "SELECT v.chunk_id, c.citekey, v.vec FROM vectors v JOIN chunks c ON c.id = v.chunk_id"
+                ).fetchall()
+                keys = [(r[0], r[1]) for r in rows]
+            else:
+                rows = db.execute("SELECT citekey, citekey, vec FROM paper_vectors").fetchall()
+                keys = [r[0] for r in rows]
+            matrix = (
+                np.vstack([np.frombuffer(r[2], dtype=np.float32) for r in rows])
+                if rows
+                else np.zeros((0, 1))
+            )
+            self._cache[table] = (keys, matrix)
+        return self._cache[table]
+
+    def _semantic_chunks(
+        self, db, query_vec, allowed: set[str], paper: str | None, limit: int
+    ) -> list[int]:
+        keys, matrix = self._matrix(db, "vectors")
+        if not keys:
+            return []
+        scores = matrix @ query_vec
+        ranked = []
+        for index in np.argsort(-scores):
+            chunk_id, citekey = keys[index]
+            if citekey in allowed and (paper is None or citekey == paper):
+                ranked.append(chunk_id)
+                if len(ranked) >= limit:
+                    break
+        return ranked
+
+    def _semantic_papers(self, db, query_vec, allowed: set[str], limit: int) -> list[str]:
+        keys, matrix = self._matrix(db, "paper_vectors")
+        if not keys:
+            return []
+        scores = matrix @ query_vec
+        return [keys[i] for i in np.argsort(-scores) if keys[i] in allowed][:limit]
+
+    def _query_vector(self, query: str) -> np.ndarray | None:
+        if self.embedder is None:
+            return None
+        try:
+            return self.embedder.embed([query])[0]
+        except EmbeddingError as exc:
+            self.warning = f"{exc}; búsqueda solo por palabras"
+            self.embedder = None
+            return None
+
     def list(self, filters: Filters) -> list[Hit]:
         self.update()
         db = self.connect()
@@ -312,15 +446,10 @@ class SearchIndex:
         db.close()
         return hits
 
-    def passages(
-        self, query: str, filters: Filters, paper: str | None = None, limit: int = 8,
-        include_refs: bool = False,
-    ) -> list[Passage]:  # fmt: skip
-        self.update()
+    def _lexical_chunks(self, db, query, filters, paper, limit, include_refs) -> list[int]:
         match = fts_query(query)
         if not match:
             return []
-        db = self.connect()
         where, params = self._where(filters)
         extra = ""
         if paper:
@@ -329,13 +458,45 @@ class SearchIndex:
         if not include_refs:
             extra += " AND c.kind != 'refs'"
         sql = f"""
-            SELECT c.*, bm25(chunks_fts) AS score FROM chunks_fts
+            SELECT c.id FROM chunks_fts
             JOIN chunks c ON c.id = chunks_fts.rowid
             JOIN papers p ON p.citekey = c.citekey
             WHERE chunks_fts MATCH ? AND {where}{extra}
-            ORDER BY score LIMIT ?
+            ORDER BY bm25(chunks_fts) LIMIT ?
         """
-        rows = db.execute(sql, [match, *params, limit]).fetchall()
+        return [r[0] for r in db.execute(sql, [match, *params, limit])]
+
+    def _chunk_rankings(
+        self, db, query, filters, paper, limit, include_refs, mode
+    ) -> list[tuple[str, list[int]]]:
+        rankings = []
+        if mode in ("lexical", "hybrid") or not self.semantic:
+            lexical = self._lexical_chunks(db, query, filters, paper, limit, include_refs)
+            rankings.append(("lexical_chunks", lexical))
+        if mode in ("semantic", "hybrid") and self.semantic:
+            vector = self._query_vector(query)
+            if vector is not None:
+                allowed = self._allowed(db, filters)
+                semantic = self._semantic_chunks(db, vector, allowed, paper, limit)
+                rankings.append(("semantic_chunks", semantic))
+        return rankings
+
+    def passages(
+        self, query: str, filters: Filters, paper: str | None = None, limit: int = 8,
+        include_refs: bool = False, mode: Mode = "hybrid",
+    ) -> list[Passage]:  # fmt: skip
+        self.update()
+        db = self.connect()
+        rankings = self._chunk_rankings(
+            db, query, filters, paper, max(limit * 4, 40), include_refs, mode
+        )
+        fused = _rrf(
+            [ranking for _, ranking in rankings], [WEIGHTS[label] for label, _ in rankings]
+        )
+        ordered = sorted(fused, key=lambda k: -fused[k])[:limit]
+        rows = {r["id"]: r for r in db.execute(
+            f"SELECT * FROM chunks WHERE id IN ({','.join('?' * len(ordered))})", ordered
+        )} if ordered else {}  # fmt: skip
         db.close()
         return [
             Passage(
@@ -345,43 +506,59 @@ class SearchIndex:
                 r["section"],
                 r["kind"],
                 r["text"],
-                r["score"],
+                fused[i],
             )
-            for r in rows
+            for i in ordered
+            if (r := rows.get(i)) is not None
         ]
 
-    def search(self, query: str, filters: Filters, limit: int = 10) -> list[Hit]:
-        """Papers ranked by Reciprocal Rank Fusion of paper-level and passage-level BM25."""
+    def search(
+        self, query: str, filters: Filters, limit: int = 10, mode: Mode = "hybrid"
+    ) -> list[Hit]:
+        """Papers ranked by RRF of paper-level and passage-level BM25 and, if enabled, vectors."""
         self.update()
         match = fts_query(query)
-        if not match:
+        if not match and not self.semantic:
             return self.list(filters)[:limit]
         db = self.connect()
-        where, params = self._where(filters)
-        paper_rows = db.execute(
-            f"""SELECT p.*, bm25(papers_fts, 0, 10, 3, 2, 3, 4, 2) AS score FROM papers_fts
-                JOIN papers p ON p.citekey = papers_fts.citekey
-                WHERE papers_fts MATCH ? AND {where} ORDER BY score LIMIT 50""",
-            [match, *params],
-        ).fetchall()
-        db.close()
-        passages = self.passages(query, filters, limit=200)
-        fused: dict[str, float] = {}
-        for rank, row in enumerate(paper_rows):
-            fused[row["citekey"]] = fused.get(row["citekey"], 0) + 1 / (60 + rank)
-        by_paper: dict[str, list[Passage]] = {}
-        for passage in passages:
-            by_paper.setdefault(passage.citekey, []).append(passage)
-        for rank, key in enumerate(by_paper):
-            fused[key] = fused.get(key, 0) + 1 / (60 + rank)
-        db = self.connect()
+        rankings: list[list[str]] = []
+        weights: list[float] = []
+        if match and (mode in ("lexical", "hybrid") or not self.semantic):
+            where, params = self._where(filters)
+            rankings.append([r[0] for r in db.execute(
+                f"""SELECT p.citekey FROM papers_fts JOIN papers p ON p.citekey = papers_fts.citekey
+                    WHERE papers_fts MATCH ? AND {where}
+                    ORDER BY bm25(papers_fts, 0, 10, 3, 2, 3, 4, 2) LIMIT 50""",
+                [match, *params],
+            )])  # fmt: skip
+            weights.append(WEIGHTS["lexical_paper"])
+        vector = self._query_vector(query) if mode in ("semantic", "hybrid") else None
+        if vector is not None:
+            rankings.append(self._semantic_papers(db, vector, self._allowed(db, filters), 50))
+            weights.append(WEIGHTS["semantic_paper"])
+        chunk_rankings = self._chunk_rankings(db, query, filters, None, 200, False, mode)
+        chunk_owner = {}
+        if any(ranking for _, ranking in chunk_rankings):
+            ids = sorted({i for _, ranking in chunk_rankings for i in ranking})
+            chunk_owner = dict(db.execute(
+                f"SELECT id, citekey FROM chunks WHERE id IN ({','.join('?' * len(ids))})", ids
+            ).fetchall())  # fmt: skip
+        for label, ranking in chunk_rankings:
+            per_paper: list[str] = []
+            for chunk_id in ranking:
+                owner = chunk_owner.get(chunk_id)
+                if owner and owner not in per_paper:
+                    per_paper.append(owner)
+            rankings.append(per_paper)
+            weights.append(WEIGHTS[label])
+        fused = _rrf(rankings, weights)
         hits = []
-        for key, score in sorted(fused.items(), key=lambda kv: -kv[1])[:limit]:
+        for key in sorted(fused, key=lambda k: -fused[k])[:limit]:
             row = db.execute("SELECT * FROM papers WHERE citekey = ?", (key,)).fetchone()
-            hit = _hit(row, score)
-            hit.passages = by_paper.get(key, [])[:2]
-            hits.append(hit)
+            hits.append(_hit(row, fused[key]))
         db.close()
+        for hit in hits:
+            hit.passages = self.passages(query, filters, paper=hit.citekey, limit=2, mode=mode)
         return hits
 
 
@@ -400,3 +577,20 @@ def _hit(row: sqlite3.Row, score: float) -> Hit:
         row["one_sentence"],
         score,
     )
+
+
+def open_index(lib: Library, semantic: bool = True) -> SearchIndex:
+    """The index with the active machine profile's embedder (lexical only if disabled or failing)."""
+    from .embeddings import get_embedder
+    from .machines import detect_machine_name, load_profile
+
+    embedder = None
+    warning = None
+    if semantic:
+        try:
+            embedder = get_embedder(load_profile(lib.home, detect_machine_name()))
+        except EmbeddingError as exc:
+            warning = str(exc)
+    index = SearchIndex(lib, embedder)
+    index.warning = warning
+    return index
