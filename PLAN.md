@@ -199,7 +199,7 @@ $ uv run sb ask "¿qué artículos experimentales hay sobre techos verdes en cli
 
 | Repo | Contenido | Visibilidad |
 |---|---|---|
-| `second-brain` → [AltamarMx/second-brain](https://github.com/AltamarMx/second-brain), local en `~/second-brain` | Código: paquete `second_brain`, pruebas, documentación técnica, plantillas de skills y de `AGENTS.md` | Licencia AGPL-3.0-or-later. Privado por ahora; para compartirlo, invitar colaboradores o hacerlo público |
+| `second-brain` → [AltamarMx/second-brain](https://github.com/AltamarMx/second-brain), local en `~/second-brain` | Código: paquete `second_brain`, pruebas, documentación técnica, plantillas de skills y de `AGENTS.md` | Licencia AGPL-3.0-or-later. **Público** desde el 2026-10-04 |
 | `biblioteca` → [AltamarMx/biblioteca](https://github.com/AltamarMx/biblioteca), local en `~/biblioteca` | Datos: `library/`, `inbox/`, `pdfs/`, configuración, perfiles de máquina, skills y `AGENTS.md` generados | **Privado siempre** |
 
 El `pyproject.toml` del repo de datos solo declara la dependencia:
@@ -1029,9 +1029,11 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 3: Proyectos y BibTeX
 
-- [ ] `sb project …` con `kind`, validación de existencia y sugerencia del más parecido.
-- [ ] `sb bib` (proyecto, claves, `--from-tex`, `sync`) con protección de mayúsculas y limpieza de HTML/MathML.
-- [ ] Pruebas *golden* del BibTeX.
+- [x] `sb project …` con `kind`, validación de existencia y sugerencia del más parecido.
+- [x] `sb bib` (proyecto, claves, `--from-tex`, `sync`) con protección de mayúsculas y limpieza de HTML/MathML.
+- [x] Pruebas *golden* del BibTeX.
+
+**Terminada el 2026-10-04.** Con los 18 artículos reales del laboratorio, el `.bib` compila con `elsarticle` + `elsarticle-harv` (BibTeX) y con biblatex + biber. Solo hay avisos de BibTeX para los artículos sin autor, que siguen en `needs_review`. Las pruebas automáticas también compilan con LaTeX cuando está instalado. Limitación: los títulos se guardan como texto plano, así que `CO<sub>2</sub>` de Crossref queda como `{CO2}`, no como `CO$_2$`.
 
 **Terminado cuando:** el `.bib` de un proyecto compila con una plantilla de revista (natbib/BibTeX) y con biblatex/biber, y `sb bib --from-tex` detecta las claves que faltan.
 
@@ -1234,4 +1236,7 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 | 2026-10-04 | Fase 2 terminada | Ingesta por DOI, `awaiting_pdf`, detección de red y OpenVPN, `sb pdf`; casi todas las editoriales bloquean robots y no se insistirá en descargas automáticas |
 
-**Próximo paso:** fase 3 (proyectos y BibTeX).
+| 2026-10-04 | Fase 3 terminada | `sb project`, `sb bib` (proyecto, citekeys, `.tex`, `sync`); compila con elsarticle y biblatex |
+| 2026-10-04 | Repo de código público | `AltamarMx/second-brain` pasa a público (AGPL-3.0-or-later); `biblioteca` sigue privado |
+
+**Próximo paso:** fase 4 (procesamiento con Claude, figuras, búsqueda y `sb chat`).

@@ -80,7 +80,7 @@ def fetcher_for(web: FakeWeb, email=None, confirm=None, access=ACCESS, sleeps=No
 
 
 def test_in_ranges():
-    assert in_ranges("132.248.30.253", ["132.247.0.0/16", "132.248.0.0/16"])
+    assert in_ranges("132.248.1.1", ["132.247.0.0/16", "132.248.0.0/16"])
     assert not in_ranges("8.8.8.8", ["132.248.0.0/16"])
 
 

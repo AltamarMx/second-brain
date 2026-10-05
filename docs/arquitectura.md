@@ -26,6 +26,9 @@ Para quien modifique el código. El porqué de cada decisión está en `PLAN.md`
 | `ingest/dedupe.py` | Índice en memoria por hash, DOI y título |
 | `fetch/download.py` | Descarga de PDFs: acceso abierto, acceso institucional, pausas y límites, clasificación de fallos |
 | `fetch/network.py` | IP pública y rangos institucionales |
+| `projects.py` | Crear proyectos, agregar y quitar artículos, listar |
+| `bibtex.py` | BibTeX/BibLaTeX determinista desde los registros |
+| `texcite.py` | Citekeys citados en un `.tex` |
 | `citekey.py` | Generación de citekeys |
 | `reading.py` | Páginas y secciones de un texto completo |
 | `textutil.py` | Normalización de texto (ASCII, etiquetas HTML, comparación difusa) |

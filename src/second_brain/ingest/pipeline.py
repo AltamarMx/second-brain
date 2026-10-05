@@ -27,6 +27,7 @@ from ..config import LibraryConfig
 from ..fetch.download import FetchedPdf, Fetcher, FetchFailure
 from ..library import Library
 from ..models import FullText, Paper, PdfInfo, PdfSource, Provenance
+from ..projects import ProjectError, require_project
 from ..textutil import normalize_for_match
 from .dedupe import LibraryIndex
 from .doi import doi_variants, find_arxiv, find_dois, normalize_doi
@@ -160,8 +161,11 @@ class Ingestor:
 
     def run(self, paths: list[Path], dois: list[str] | None = None) -> list[IngestResult]:
         project = self.options.project
-        if project and not self.lib.project_path(project).is_file():
-            raise IngestError(f"el proyecto '{project}' no existe (créalo con sb project create)")
+        if project:
+            try:
+                require_project(self.lib, project)
+            except ProjectError as exc:
+                raise IngestError(str(exc)) from exc
         if self.options.forced_doi and (len(paths) != 1 or dois):
             raise IngestError("--doi solo se puede usar con un único PDF")
         with ingest_lock(self.lib):

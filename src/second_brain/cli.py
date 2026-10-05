@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import subprocess
 import sys
 import webbrowser
@@ -16,6 +17,8 @@ from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
+from . import bibtex as bibmod
+from . import projects as proj
 from .checks import run_checks
 from .config import HomeNotFoundError, find_home, load_config
 from .doctor import library_status, run_doctor
@@ -25,8 +28,10 @@ from .ingest.metadata import MetadataClient
 from .ingest.pipeline import IngestError, IngestOptions, Ingestor, IngestResult, LockedError
 from .library import InvalidDocument, Library
 from .machines import Agent, Backend, detect_machine_name, load_profile, profile_path
+from .models import CITEKEY_PATTERN
 from .reading import select_pages, select_section
 from .scaffold import ScaffoldReport, init_library, init_machine
+from .texcite import cited_keys
 
 app = typer.Typer(
     name="sb",
@@ -41,6 +46,11 @@ machine_app = typer.Typer(
 app.add_typer(machine_app, name="machine")
 pdf_app = typer.Typer(help="PDFs: faltantes, descarga y apertura.", no_args_is_help=True)
 app.add_typer(pdf_app, name="pdf")
+project_app = typer.Typer(help="Proyectos: crear, asignar artículos, listar.", no_args_is_help=True)
+app.add_typer(project_app, name="project")
+bib_app = typer.Typer(help="BibTeX generado desde los registros.")
+app.add_typer(bib_app, name="bib")
+err_console = Console(stderr=True)
 
 console = Console()
 STATE_STYLE = {
@@ -347,7 +357,7 @@ def ingest(
 
 
 def _read_paper(lib: Library, citekey: str):
-    if not lib.paper_path(citekey).is_file():
+    if not re.fullmatch(CITEKEY_PATTERN, citekey) or not lib.paper_path(citekey).is_file():
         console.print(f"[red]✗[/] no existe el artículo {escape(citekey)}")
         raise typer.Exit(1)
     return lib.read_paper(citekey)
@@ -560,4 +570,288 @@ def pdf_open(
         webbrowser.open(f"https://doi.org/{paper.doi}")
     else:
         console.print(f"[red]✗[/] {citekey} no tiene PDF local ni DOI")
+        raise typer.Exit(1)
+
+
+# --- projects -------------------------------------------------------------------
+
+
+def _project_error(exc: Exception) -> typer.Exit:
+    console.print(f"[red]✗[/] {escape(str(exc))}")
+    return typer.Exit(1)
+
+
+@project_app.command("create")
+def project_create(
+    ctx: typer.Context,
+    slug: Annotated[str | None, typer.Argument(help="Identificador: minúsculas y guiones.")] = None,
+    name: Annotated[str | None, typer.Option(help="Nombre legible.")] = None,
+    kind: Annotated[str | None, typer.Option(help="Tipo (ver [vocab].project_kind).")] = None,
+    desc: Annotated[
+        str | None, typer.Option(help="Descripción: objetivo, preguntas, palabras clave.")
+    ] = None,
+) -> None:
+    """Crea un proyecto. Sin argumentos, pregunta cada dato."""
+    lib = Library(_home(ctx))
+    config = load_config(lib.home)
+    interactive = sys.stdin.isatty()
+    if slug is None:
+        if not interactive:
+            console.print("[red]✗[/] falta el slug del proyecto")
+            raise typer.Exit(2)
+        slug = typer.prompt("Slug (p. ej., tesis-doctoral)")
+    if name is None:
+        name = typer.prompt("Nombre", default=slug) if interactive else slug
+    if kind is None and interactive:
+        options = ", ".join(config.vocab.project_kind)
+        kind = (
+            typer.prompt(f"Tipo ({options}; vacío si ninguno)", default="", show_default=False)
+            or None
+        )
+    if desc is None and interactive:
+        desc = typer.prompt("Descripción (vacía si ninguna)", default="", show_default=False)
+    try:
+        proj.create_project(lib, config, slug, name, kind, desc or "")
+    except proj.ProjectError as exc:
+        raise _project_error(exc) from exc
+    console.print(
+        f"[green]✓[/] Proyecto [bold]{slug}[/] creado ({lib.project_path(slug).relative_to(lib.home)})"
+    )
+
+
+@project_app.command("add")
+def project_add(
+    ctx: typer.Context,
+    slug: Annotated[str, typer.Argument(help="Proyecto.")],
+    citekeys: Annotated[list[str], typer.Argument(help="Artículos a agregar.")],
+    note: Annotated[str | None, typer.Option(help="Para qué sirve en este proyecto.")] = None,
+) -> None:
+    """Agrega artículos a un proyecto."""
+    lib = Library(_home(ctx))
+    try:
+        added, present = proj.add_papers(lib, slug, citekeys, note)
+    except proj.ProjectError as exc:
+        raise _project_error(exc) from exc
+    for key in added:
+        console.print(f"[green]+[/] {key}")
+    for key in present:
+        console.print(f"[dim]= {key} (ya estaba{'; nota actualizada' if note else ''})[/]")
+
+
+@project_app.command("remove")
+def project_remove(
+    ctx: typer.Context,
+    slug: Annotated[str, typer.Argument(help="Proyecto.")],
+    citekeys: Annotated[list[str], typer.Argument(help="Artículos a quitar.")],
+) -> None:
+    """Quita artículos de un proyecto (los artículos siguen en la biblioteca)."""
+    lib = Library(_home(ctx))
+    try:
+        removed, absent = proj.remove_papers(lib, slug, citekeys)
+    except proj.ProjectError as exc:
+        raise _project_error(exc) from exc
+    for key in removed:
+        console.print(f"[red]-[/] {key}")
+    for key in absent:
+        console.print(f"[dim]= {key} (no estaba en {slug})[/]")
+
+
+@project_app.command("list")
+def project_list(
+    ctx: typer.Context,
+    kind: Annotated[str | None, typer.Option(help="Solo de este tipo.")] = None,
+    all_: Annotated[bool, typer.Option("--all", help="Incluir archivados.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Lista los proyectos con su número de artículos."""
+    rows = [
+        s
+        for s in proj.summaries(Library(_home(ctx)))
+        if (kind is None or s.project.kind == kind) and (all_ or s.project.status != "archived")
+    ]
+    if as_json:
+        data = [
+            {
+                **s.project.model_dump(mode="json"),
+                "description": s.description,
+                "papers": len(s.members),
+            }
+            for s in rows
+        ]
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+        return
+    if not rows:
+        console.print("No hay proyectos. Crea uno con: sb project create")
+        return
+    for s in rows:
+        kind_text = f" · {s.project.kind}" if s.project.kind else ""
+        status = "" if s.project.status == "active" else f" · {s.project.status}"
+        console.print(
+            f"[bold]{s.project.slug}[/]  {escape(s.project.name)}  "
+            f"[dim]{len(s.members)} artículos{kind_text}{status}[/]"
+        )
+
+
+@project_app.command("show")
+def project_show(
+    ctx: typer.Context,
+    slug: Annotated[str, typer.Argument(help="Proyecto.")],
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Descripción y artículos de un proyecto."""
+    lib = Library(_home(ctx))
+    try:
+        doc = proj.require_project(lib, slug)
+    except proj.ProjectError as exc:
+        raise _project_error(exc) from exc
+    papers = sorted(proj.members(lib, slug), key=lambda p: p.citekey)
+    if as_json:
+        data = {
+            **doc.meta.model_dump(mode="json"),
+            "description": doc.body,
+            "papers": [
+                {
+                    "citekey": p.citekey,
+                    "title": p.title,
+                    "year": p.year,
+                    "note": p.projects[slug].note,
+                }
+                for p in papers
+            ],
+        }
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+        return
+    kind_text = f" · {doc.meta.kind}" if doc.meta.kind else ""
+    console.print(
+        f"[bold]{escape(doc.meta.name)}[/] [dim]({slug}{kind_text} · {doc.meta.status})[/]"
+    )
+    if doc.body:
+        console.print(escape(doc.body))
+    console.print(f"\n{len(papers)} artículos:")
+    for p in papers:
+        note = p.projects[slug].note
+        console.print(
+            f"  {p.citekey}  {escape(p.title)}" + (f"  [dim]— {escape(note)}[/]" if note else "")
+        )
+
+
+@project_app.command("archive")
+def project_archive(
+    ctx: typer.Context,
+    slug: Annotated[str, typer.Argument(help="Proyecto.")],
+    restore: Annotated[bool, typer.Option(help="Volver a activarlo.")] = False,
+) -> None:
+    """Archiva un proyecto terminado (sus artículos conservan la membresía)."""
+    try:
+        project = proj.set_status(Library(_home(ctx)), slug, "active" if restore else "archived")
+    except proj.ProjectError as exc:
+        raise _project_error(exc) from exc
+    console.print(f"[green]✓[/] {slug}: {project.status}")
+
+
+# --- BibTeX -------------------------------------------------------------------
+
+
+def _write_bib(text: str, output: Path | None) -> bool:
+    """Write the .bib (or print it); return True if the file changed."""
+    if output is None:
+        print(text, end="")
+        return True
+    output = output.expanduser()
+    if output.exists() and output.read_text(encoding="utf-8") == text:
+        return False
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text, encoding="utf-8")
+    return True
+
+
+@bib_app.callback(invoke_without_command=True)
+def bib(
+    ctx: typer.Context,
+    project: Annotated[
+        list[str] | None, typer.Option("--project", "-p", help="Artículos de este proyecto.")
+    ] = None,
+    keys: Annotated[str | None, typer.Option(help="Citekeys separados por comas.")] = None,
+    from_tex: Annotated[
+        Path | None, typer.Option(help="Los artículos citados en este .tex.")
+    ] = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Archivo .bib (si no, a la pantalla).")
+    ] = None,
+    fmt: Annotated[bibmod.Format, typer.Option("--format", help="bibtex o biblatex.")] = "bibtex",
+    strict: Annotated[
+        bool, typer.Option(help="Terminar con error si falta algún citekey.")
+    ] = False,
+) -> None:
+    """Genera BibTeX de un proyecto, de unos citekeys o de lo citado en un .tex."""
+    if ctx.invoked_subcommand:
+        return
+    if not (project or keys or from_tex):
+        console.print(ctx.get_help())
+        raise typer.Exit(0)
+    lib = Library(_home(ctx))
+    selected: dict[str, object] = {}
+    missing: list[str] = []
+    for slug in project or []:
+        try:
+            proj.require_project(lib, slug)
+        except proj.ProjectError as exc:
+            err_console.print(f"[red]✗[/] {escape(str(exc))}")
+            raise typer.Exit(1) from exc
+        for paper in proj.members(lib, slug):
+            selected[paper.citekey] = paper
+    wanted = [k.strip() for k in (keys or "").split(",") if k.strip()]
+    if from_tex:
+        if not from_tex.expanduser().is_file():
+            err_console.print(f"[red]✗[/] no existe {escape(str(from_tex))}")
+            raise typer.Exit(2)
+        wanted += cited_keys(from_tex.expanduser())
+    for key in wanted:
+        if key in selected:
+            continue
+        if re.fullmatch(CITEKEY_PATTERN, key) and lib.paper_path(key).is_file():
+            selected[key] = lib.read_paper(key).meta
+        elif key not in missing:
+            missing.append(key)
+    text = bibmod.render(list(selected.values()), fmt)
+    changed = _write_bib(text, output)
+    if output is not None:
+        state = "escrito" if changed else "sin cambios"
+        err_console.print(f"[green]✓[/] {len(selected)} entradas → {escape(str(output))} ({state})")
+    if missing:
+        err_console.print(
+            f"[yellow]![/] {len(missing)} citekeys no están en la biblioteca: {escape(', '.join(missing))}"
+        )
+        if strict:
+            raise typer.Exit(1)
+
+
+@bib_app.command("sync")
+def bib_sync(
+    ctx: typer.Context,
+    fmt: Annotated[bibmod.Format, typer.Option("--format", help="bibtex o biblatex.")] = "bibtex",
+) -> None:
+    """Reescribe los .bib de [bib_outputs] del perfil de esta máquina."""
+    lib = Library(_home(ctx))
+    machine = detect_machine_name()
+    profile = load_profile(lib.home, machine)
+    if profile is None or not profile.bib_outputs:
+        console.print(f"No hay [bold]\\[bib_outputs][/] en machines/{machine}.toml. Ejemplo:")
+        console.print('  [bib_outputs]\n  tesis-doctoral = "~/Documents/tesis/refs.bib"')
+        return
+    failed = False
+    for slug, target in profile.bib_outputs.items():
+        path = Path(target).expanduser()
+        path = path if path.is_absolute() else lib.home / path
+        try:
+            proj.require_project(lib, slug)
+        except proj.ProjectError as exc:
+            console.print(f"[red]✗[/] {escape(str(exc))}")
+            failed = True
+            continue
+        papers = proj.members(lib, slug)
+        changed = _write_bib(bibmod.render(papers, fmt), path)
+        mark, state = ("[green]✓[/]", "actualizado") if changed else ("[dim]=[/]", "sin cambios")
+        console.print(f"{mark} {slug}: {len(papers)} entradas → {escape(str(path))} ({state})")
+    if failed:
         raise typer.Exit(1)

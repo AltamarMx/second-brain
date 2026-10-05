@@ -36,6 +36,11 @@ uv run sb doctor
 | `sb pdf open KEY` | Abre el PDF local o la página del artículo en el navegador |
 | `sb show KEY [--json]` | Metadatos y resumen de un artículo |
 | `sb text KEY [--pages 4-6] [--section S]` | Texto completo, algunas páginas o una sección |
+| `sb project create [SLUG] [--name N] [--kind K] [--desc D]` | Crea un proyecto (sin argumentos, pregunta cada dato) |
+| `sb project add SLUG KEY… [--note N]` / `remove SLUG KEY…` | Agrega o quita artículos de un proyecto |
+| `sb project list [--kind K] [--all]` / `show SLUG` / `archive SLUG [--restore]` | Lista, detalle y archivo de proyectos |
+| `sb bib -p SLUG \| --keys K1,K2 \| --from-tex main.tex [-o refs.bib] [--format biblatex] [--strict]` | BibTeX desde los registros |
+| `sb bib sync` | Reescribe los `.bib` de `[bib_outputs]` del perfil de la máquina |
 | `sb remove KEY [--delete-pdf] [--yes]` | Elimina un artículo (el PDF pasa a `inbox/_eliminados/`) |
 
 Opciones globales: `--home RUTA` (o la variable `SB_HOME`) y `--version`.
@@ -85,6 +90,29 @@ Para cada DOI, `sb`:
 6. Sin PDF, registra el artículo como `awaiting_pdf` (`…` en la salida) con el motivo. Cuando consigas el PDF, suéltalo en `inbox/`: se asocia solo a su registro.
 
 Reglas de cortesía (en `[access]`): una pausa de `seconds_between_downloads` entre peticiones a editoriales y como máximo `max_downloads_per_run` descargas por corrida. Las editoriales que bloquean robots no se intentan esquivar: `sb pdf open KEY` abre el artículo en el navegador para que lo descargues tú.
+
+## Proyectos y BibTeX
+
+```bash
+uv run sb project create tesis-doctoral --name "Tesis doctoral" --kind tesis --desc "Confort térmico…"
+uv run sb project add tesis-doctoral lopezperez2019adaptive nicol2010derivation --note "Cap. 2"
+uv run sb ingest --project tesis-doctoral          # lo que se ingiera ahora entra al proyecto
+uv run sb bib -p tesis-doctoral -o ~/tesis/refs.bib
+uv run sb bib --from-tex ~/tesis/main.tex -o ~/tesis/refs.bib   # solo lo citado; avisa de lo que falta
+```
+
+- `--project` solo acepta proyectos que existan; si escribes mal el nombre, sugiere el más parecido. Los tipos (`--kind`) están en `[vocab].project_kind` de `config.toml`.
+- `--from-tex` sigue `\input` e `\include` y reconoce `\cite`, `\citep`, `\citet`, `\parencite`, `\textcite`, `\autocite`, `\nocite`… Con `--strict` termina con error si falta algún citekey.
+- `--format bibtex` (por defecto) convierte acentos a LaTeX para máxima compatibilidad (p. ej., `elsarticle`). `--format biblatex` deja UTF-8, para usarse con biber.
+- Se protegen con llaves los acrónimos (`{CO2}`, `{ASHRAE}`) y, en títulos con mayúscula solo inicial, los nombres propios (`{México}`), para que el estilo no los pase a minúsculas.
+- Para no repetir rutas, declara en el perfil de la máquina:
+
+  ```toml
+  [bib_outputs]
+  tesis-doctoral = "~/Documents/tesis/refs.bib"
+  ```
+
+  y ejecuta `uv run sb bib sync`.
 
 ## Usar `sb` desde otra carpeta
 

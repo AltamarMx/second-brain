@@ -61,6 +61,7 @@ def run_checks(home: Path, *, fast: bool = False) -> CheckReport:
     _check_layout(lib, report)
     _check_machines(home, report)
     projects = _check_projects(lib, config, report)
+    _check_bib_outputs(home, projects, report)
     citekeys = _check_papers(lib, config, projects, report)
     if not fast:
         _check_companions(lib, citekeys, report)
@@ -87,6 +88,23 @@ def _check_machines(home: Path, report: CheckReport) -> None:
                 MachineProfile.model_validate(tomllib.load(handle))
         except (tomllib.TOMLDecodeError, ValidationError) as exc:
             report.add("error", path, f"perfil de máquina inválido: {exc}", home)
+
+
+def _check_bib_outputs(home: Path, projects: set[str], report: CheckReport) -> None:
+    for path in sorted((home / MACHINES_DIRNAME).glob("*.toml")):
+        try:
+            with path.open("rb") as handle:
+                outputs = tomllib.load(handle).get("bib_outputs", {})
+        except tomllib.TOMLDecodeError:
+            continue  # already reported by _check_machines
+        for slug in outputs:
+            if slug not in projects:
+                report.add(
+                    "warning",
+                    path,
+                    f"[bib_outputs] menciona el proyecto '{slug}', que no existe",
+                    home,
+                )
 
 
 def _invalid(doc: InvalidDocument, report: CheckReport, home: Path) -> None:
