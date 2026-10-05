@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import webbrowser
@@ -19,16 +21,20 @@ from rich.table import Table
 from . import __version__
 from . import bibtex as bibmod
 from . import projects as proj
+from .agents import sync_agents
+from .backends import BackendError, get_backend
 from .checks import run_checks
 from .config import HomeNotFoundError, find_home, load_config
 from .doctor import library_status, run_doctor
 from .fetch.download import Fetcher
+from .index import Filters, SearchIndex
 from .ingest.doi import DOI_RE, normalize_doi
 from .ingest.metadata import MetadataClient
 from .ingest.pipeline import IngestError, IngestOptions, Ingestor, IngestResult, LockedError
 from .library import InvalidDocument, Library
 from .machines import Agent, Backend, detect_machine_name, load_profile, profile_path
 from .models import CITEKEY_PATTERN
+from .processing import Processor, ProcessResult
 from .reading import select_pages, select_section
 from .scaffold import ScaffoldReport, init_library, init_machine
 from .texcite import cited_keys
@@ -276,17 +282,70 @@ def _ingestor(lib: Library, options: IngestOptions, interactive: bool) -> Ingest
     return Ingestor(lib, config, client, options, fetcher=fetcher)
 
 
+def _process_keys(
+    lib: Library,
+    keys: list[str],
+    quiet: bool,
+    backend_name: str | None = None,
+    **options: bool,
+) -> dict[str, ProcessResult]:
+    """Process papers with this machine's backend; prints progress unless ``quiet``."""
+    if not keys:
+        return {}
+    machine = detect_machine_name()
+    profile = load_profile(lib.home, machine)
+    name = backend_name or (profile.process.backend if profile else None)
+    if name is None:
+        if not quiet:
+            console.print(
+                f"[yellow]![/] Sin perfil machines/{machine}.toml: no se procesó (sb machine init)."
+            )
+        return {}
+    if name == "none":
+        if not quiet:
+            console.print(
+                '[dim]Esta máquina no procesa artículos (backend = "none"): quedan pendientes.[/]'
+            )
+        return {}
+    try:
+        backend = get_backend(name)
+    except BackendError as exc:
+        if not quiet:
+            console.print(f"[red]✗[/] {escape(str(exc))}")
+        return {}
+    processor = Processor(lib, load_config(lib.home), backend, machine)
+    results: dict[str, ProcessResult] = {}
+    if not quiet:
+        console.print(f"\nProcesando {len(keys)} artículos con {name} (≈1 min cada uno)…")
+    for number, key in enumerate(keys, start=1):
+        if quiet:
+            results[key] = processor.process(key, **options)
+            continue
+        with console.status(f"[{number}/{len(keys)}] {key}…"):
+            result = processor.process(key, **options)
+        results[key] = result
+        mark = {"processed": "[green]✓[/]", "skipped": "[dim]=[/]", "error": "[red]✗[/]"}[
+            result.outcome
+        ]
+        detail = "; ".join(x for x in (result.message, *result.notes) if x)
+        console.print(f"{mark} {key}  [dim]{escape(detail)}[/]")
+    return results
+
+
 def _run_ingest(
-    ingestor: Ingestor, paths: list[Path], dois: list[str], as_json: bool, dry_run: bool
+    ingestor: Ingestor,
+    paths: list[Path],
+    dois: list[str],
+    as_json: bool,
+    dry_run: bool,
+    process: bool = False,
 ) -> None:
     try:
         results = ingestor.run(paths, dois)
     except (IngestError, LockedError) as exc:
         console.print(f"[red]✗[/] {escape(str(exc))}")
         raise typer.Exit(2) from exc
-    if as_json:
-        print(json.dumps([dataclasses.asdict(r) for r in results], ensure_ascii=False, indent=2))
-    else:
+    if not as_json:
         if not ingestor.config.user.email:
             console.print(
                 "[yellow]![/] Sin \\[user].email en config.toml: Crossref atiende más lento "
@@ -299,6 +358,25 @@ def _run_ingest(
                 f"[dim]{awaiting} esperan PDF: reintenta con [bold]sb ingest --retry[/] o guarda "
                 "el PDF en inbox/ (sb pdf open KEY lo abre en el navegador).[/]"
             )
+    processed: dict[str, ProcessResult] = {}
+    if process and not dry_run:
+        keys = [
+            r.citekey
+            for r in results
+            if r.citekey and r.outcome in ("ingested", "review", "attached")
+        ]
+        processed = _process_keys(ingestor.lib, keys, quiet=as_json)
+    if as_json:
+        rows = [
+            {
+                **dataclasses.asdict(r),
+                "processing": dataclasses.asdict(processed[r.citekey])
+                if r.citekey in processed
+                else None,
+            }
+            for r in results
+        ]
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
     if any(r.outcome in ("error", "offline") for r in results):
         raise typer.Exit(1)
 
@@ -326,6 +404,9 @@ def ingest(
     limit: Annotated[
         int | None, typer.Option(min=1, help="Procesar como máximo N elementos.")
     ] = None,
+    no_process: Annotated[
+        bool, typer.Option("--no-process", help="No resumir ni describir figuras ahora.")
+    ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
 ) -> None:
     """Ingiere PDFs o DOIs: metadatos, descarga, duplicados, texto completo y pdfs/."""
@@ -353,7 +434,7 @@ def ingest(
     if limit:
         paths = paths[:limit]
         wanted = wanted[: max(0, limit - len(paths))]
-    _run_ingest(ingestor, paths, wanted, as_json, dry_run)
+    _run_ingest(ingestor, paths, wanted, as_json, dry_run, process=not no_process)
 
 
 def _read_paper(lib: Library, citekey: str):
@@ -855,3 +936,241 @@ def bib_sync(
         console.print(f"{mark} {slug}: {len(papers)} entradas → {escape(str(path))} ({state})")
     if failed:
         raise typer.Exit(1)
+
+
+# --- processing -----------------------------------------------------------------
+
+
+@app.command()
+def process(
+    ctx: typer.Context,
+    citekeys: Annotated[list[str] | None, typer.Argument(help="Artículos a procesar.")] = None,
+    pending: Annotated[bool, typer.Option(help="Todos los que falten por procesar.")] = False,
+    stale: Annotated[
+        bool, typer.Option(help="Rehacer lo hecho con una versión anterior del prompt.")
+    ] = False,
+    force: Annotated[
+        bool, typer.Option(help="Rehacer aunque ya esté hecho (incluso si lo editaste).")
+    ] = False,
+    figures: Annotated[bool, typer.Option(help="Describir las figuras.")] = True,
+    backend: Annotated[str | None, typer.Option(help="Forzar un backend (claude, none…).")] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Resumen, clasificación y descripción de figuras con el LLM del perfil de la máquina."""
+    lib = Library(_home(ctx))
+    config = load_config(lib.home)
+    keys = list(citekeys or [])
+    if pending or stale:
+        dummy = Processor(lib, config, backend=None, machine="")  # type: ignore[arg-type]
+        for doc in lib.iter_papers():
+            if isinstance(doc, InvalidDocument) or doc.meta.citekey in keys:
+                continue
+            if not lib.fulltext_path(doc.meta.citekey).is_file():
+                continue
+            if dummy.needs_summary(doc.meta, doc.body, stale) or (
+                figures and dummy.needs_figures(doc.meta, stale)
+            ):
+                keys.append(doc.meta.citekey)
+    for key in keys:
+        _read_paper(lib, key)
+    if not keys:
+        console.print("Nada que procesar.") if not as_json else print("[]")
+        return
+    results = _process_keys(
+        lib, keys, quiet=as_json, backend_name=backend, force=force, stale=stale, figures=figures
+    )
+    if as_json:
+        print(
+            json.dumps(
+                [dataclasses.asdict(r) for r in results.values()], ensure_ascii=False, indent=2
+            )
+        )
+    if any(r.outcome == "error" for r in results.values()):
+        raise typer.Exit(1)
+
+
+@app.command()
+def figures(
+    ctx: typer.Context,
+    citekey: Annotated[str, typer.Argument(help="Artículo.")],
+) -> None:
+    """Vuelve a describir las figuras de un artículo."""
+    lib = Library(_home(ctx))
+    _read_paper(lib, citekey)
+    results = _process_keys(lib, [citekey], quiet=False, force=True, summary=False, figures=True)
+    if any(r.outcome == "error" for r in results.values()):
+        raise typer.Exit(1)
+
+
+# --- search ---------------------------------------------------------------------
+
+ProjectOpt = Annotated[str | None, typer.Option("--project", "-p", help="Solo de este proyecto.")]
+StudyOpt = Annotated[
+    str | None, typer.Option("--study", help="Tipo de estudio (experimental, numerico, ambos…).")
+]
+CountryOpt = Annotated[str | None, typer.Option(help="País (código ISO, p. ej. MX).")]
+RegionOpt = Annotated[str | None, typer.Option(help="Estado o provincia.")]
+LocalityOpt = Annotated[str | None, typer.Option(help="Ciudad o sitio.")]
+YearOpt = Annotated[str | None, typer.Option("--year", help="2019, 2015..2024, 2015.. o ..2020.")]
+StatusOpt = Annotated[
+    str | None, typer.Option(help="Estado del registro (needs_review, processed…).")
+]
+JsonOpt = Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")]
+
+
+def _filters(project, study, country, region, locality, year, status=None) -> Filters:
+    try:
+        start, end = Filters.parse_years(year)
+    except ValueError as exc:
+        console.print(f"[red]✗[/] {escape(str(exc))}")
+        raise typer.Exit(2) from exc
+    return Filters(project, study, country, region, locality, start, end, status)
+
+
+def _print_hits(hits, show_passages: bool) -> None:
+    if not hits:
+        console.print("Sin resultados.")
+        return
+    for hit in hits:
+        meta = " · ".join(str(x) for x in (hit.year, hit.study_type, hit.places) if x)
+        console.print(f"[bold]{hit.citekey}[/]  {escape(hit.title)}  [dim]{escape(meta)}[/]")
+        if hit.one_sentence:
+            console.print(f"   {escape(hit.one_sentence)}")
+        if show_passages:
+            for passage in hit.passages:
+                snippet = " ".join(passage.text.split())[:220]
+                console.print(f"   [dim]p. {passage.page_start} · {escape(snippet)}…[/]")
+
+
+@app.command()
+def search(
+    ctx: typer.Context,
+    query: Annotated[str, typer.Argument(help="Qué buscar (palabras sueltas o una frase).")],
+    project: ProjectOpt = None, study: StudyOpt = None, country: CountryOpt = None,
+    region: RegionOpt = None, locality: LocalityOpt = None, year: YearOpt = None,
+    limit: Annotated[int, typer.Option(min=1, help="Máximo de artículos.")] = 10,
+    as_json: JsonOpt = False,
+) -> None:  # fmt: skip
+    """Busca artículos por tema en metadatos, resúmenes, texto completo y figuras."""
+    lib = Library(_home(ctx))
+    hits = SearchIndex(lib).search(
+        query, _filters(project, study, country, region, locality, year), limit
+    )
+    if as_json:
+        print(json.dumps([dataclasses.asdict(h) for h in hits], ensure_ascii=False, indent=2))
+    else:
+        _print_hits(hits, show_passages=True)
+
+
+@app.command("list")
+def list_papers(
+    ctx: typer.Context,
+    project: ProjectOpt = None, study: StudyOpt = None, country: CountryOpt = None,
+    region: RegionOpt = None, locality: LocalityOpt = None, year: YearOpt = None,
+    status: StatusOpt = None, as_json: JsonOpt = False,
+) -> None:  # fmt: skip
+    """Lista artículos con filtros (sin tema). Con --json, útil para contar."""
+    lib = Library(_home(ctx))
+    hits = SearchIndex(lib).list(_filters(project, study, country, region, locality, year, status))
+    if as_json:
+        print(json.dumps([dataclasses.asdict(h) for h in hits], ensure_ascii=False, indent=2))
+        return
+    _print_hits(hits, show_passages=False)
+    console.print(f"\n{len(hits)} artículos")
+
+
+@app.command()
+def passages(
+    ctx: typer.Context,
+    query: Annotated[str, typer.Argument(help="Qué buscar.")],
+    paper: Annotated[str | None, typer.Option(help="Solo en este artículo.")] = None,
+    limit: Annotated[int, typer.Option(min=1, help="Máximo de pasajes.")] = 8,
+    refs: Annotated[bool, typer.Option(help="Incluir la lista de referencias.")] = False,
+    project: ProjectOpt = None, study: StudyOpt = None, country: CountryOpt = None,
+    as_json: JsonOpt = False,
+) -> None:  # fmt: skip
+    """Pasajes del texto completo (y figuras) que responden a una consulta, con página y sección."""
+    lib = Library(_home(ctx))
+    found = SearchIndex(lib).passages(
+        query,
+        _filters(project, study, country, None, None, None),
+        paper=paper,
+        limit=limit,
+        include_refs=refs,
+    )
+    if as_json:
+        print(json.dumps([dataclasses.asdict(p) for p in found], ensure_ascii=False, indent=2))
+        return
+    if not found:
+        console.print("Sin resultados.")
+    for passage in found:
+        pages = f"p. {passage.page_start}" + (
+            f"–{passage.page_end}" if passage.page_end != passage.page_start else ""
+        )
+        kind = " · figura" if passage.kind == "figure" else ""
+        console.print(
+            f"[bold]{passage.citekey}[/] [dim]{pages} · {escape(passage.section)}{kind}[/]"
+        )
+        console.print(escape(passage.text.strip()) + "\n")
+
+
+index_app = typer.Typer(
+    help="Índice de búsqueda (.cache/index.sqlite, derivado).", no_args_is_help=True
+)
+app.add_typer(index_app, name="index")
+
+
+@index_app.command("update")
+def index_update(ctx: typer.Context) -> None:
+    """Actualiza el índice con lo que cambió."""
+    changed = SearchIndex(Library(_home(ctx))).update()
+    console.print(f"[green]✓[/] {changed} artículos reindexados")
+
+
+@index_app.command("rebuild")
+def index_rebuild(ctx: typer.Context) -> None:
+    """Reconstruye el índice desde cero."""
+    count = SearchIndex(Library(_home(ctx))).rebuild()
+    console.print(f"[green]✓[/] índice reconstruido: {count} artículos")
+
+
+# --- agents ---------------------------------------------------------------------
+
+agents_app = typer.Typer(help="Reglas y skills para Claude Code y OpenCode.", no_args_is_help=True)
+app.add_typer(agents_app, name="agents")
+
+
+@agents_app.command("sync")
+def agents_sync(ctx: typer.Context) -> None:
+    """Instala o actualiza AGENTS.md, CLAUDE.md, las skills sb-* y .claude/settings.json."""
+    home = _home(ctx)
+    changed = sync_agents(home)
+    for path in changed:
+        console.print(f"[green]+[/] {path.relative_to(home)}")
+    if not changed:
+        console.print("[dim]Todo al día.[/]")
+
+
+@app.command()
+def chat(
+    ctx: typer.Context,
+    agent: Annotated[
+        str | None, typer.Argument(help="claude u opencode (por defecto, el del perfil).")
+    ] = None,
+) -> None:
+    """Abre Claude Code (u OpenCode) en la biblioteca, con sus reglas y skills."""
+    home = _home(ctx)
+    profile = load_profile(home, detect_machine_name())
+    agent = agent or (profile.chat.agent if profile else "claude")
+    if agent == "opencode":
+        console.print("OpenCode con modelo local llega en la fase 6. Por ahora: sb chat claude")
+        raise typer.Exit(1)
+    if agent != "claude":
+        console.print(f"[red]✗[/] agente desconocido: {escape(agent)}")
+        raise typer.Exit(2)
+    if shutil.which("claude") is None:
+        console.print("[red]✗[/] no encontré Claude Code (`claude`)")
+        raise typer.Exit(1)
+    sync_agents(home)  # keep rules and skills in step with the installed version
+    os.chdir(home)
+    os.execvp("claude", ["claude"])

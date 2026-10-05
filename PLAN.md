@@ -1039,12 +1039,19 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 4: Procesamiento, figuras y consulta con Claude Code (primer sistema completo)
 
-- [ ] Prompt `process.v1` (resumen + clasificación); validación y procedencia.
-- [ ] Figuras: localizar, renderizar, describir (`figures.v1`), `library/figures/`, `sb figures`.
-- [ ] Backends `claude` (`claude -p`) y `none`; `sb process` (`--pending`, `--stale`); procesamiento al ingerir.
-- [ ] Índice SQLite FTS5 con filtros de clasificación; `sb search`, `sb list`, `sb passages`, `sb index`.
-- [ ] Skills `sb-ingerir`, `sb-consultar`, `sb-proyectos`, `sb-bibtex`; `AGENTS.md`; `sb agents sync`.
-- [ ] `.claude/settings.json`, hook `SessionStart`, `sb chat claude`.
+- [x] Prompt `process.v1` (resumen + clasificación); validación y procedencia.
+- [x] Figuras: localizar, renderizar, describir (`figures.v1`), `library/figures/`, `sb figures`.
+- [x] Backends `claude` (`claude -p`) y `none`; `sb process` (`--pending`, `--stale`); procesamiento al ingerir.
+- [x] Índice SQLite FTS5 con filtros de clasificación; `sb search`, `sb list`, `sb passages`, `sb index`.
+- [x] Skills `sb-ingerir`, `sb-consultar`, `sb-proyectos`, `sb-bibtex`; `AGENTS.md`; `sb agents sync`.
+- [x] `.claude/settings.json`, hook `SessionStart`, `sb chat claude`.
+
+**Terminada el 2026-10-04**, con 3 PDFs reales de Zotero en una biblioteca de prueba:
+
+- `sb ingest` procesó solo los 3 artículos (unos 3 min en total): resúmenes con cifras y páginas, clasificación correcta (p. ej., experimental, Tuxtla Gutiérrez, MX) y 13, 7 y 5 figuras descritas.
+- Preguntado en modo `-p`, el agente respondió solo con la biblioteca y con `[citekey, p. N]`. Creó un proyecto en lenguaje natural con los artículos pertinentes (explicando por qué excluyó uno) y generó su `.bib` con `sb bib`.
+- **A tener en cuenta:** Claude Code solo respeta el permiso `uv run sb` de `.claude/settings.json` si la carpeta es "confiable". La primera vez que se abre `sb chat` hay que aceptarlo.
+- Pendiente para después: los `needs_review` sin DOI todavía no reciben metadatos sugeridos por el LLM, y la búsqueda es léxica (la semántica es la fase 7).
 
 **Terminado cuando:** `uv run sb ingest` deja artículos resumidos, clasificados y con figuras descritas, sin abrir ningún agente; y desde `uv run sb chat` puedes preguntar "¿qué tengo sobre X en México?", pedir detalles con citas de página, crear un proyecto en lenguaje natural y obtener su `.bib`.
 
@@ -1239,4 +1246,6 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 | 2026-10-04 | Fase 3 terminada | `sb project`, `sb bib` (proyecto, citekeys, `.tex`, `sync`); compila con elsarticle y biblatex |
 | 2026-10-04 | Repo de código público | `AltamarMx/second-brain` pasa a público (AGPL-3.0-or-later); `biblioteca` sigue privado |
 
-**Próximo paso:** fase 4 (procesamiento con Claude, figuras, búsqueda y `sb chat`).
+| 2026-10-04 | Fase 4 terminada | Procesamiento con `claude -p` (resumen, clasificación, figuras), búsqueda FTS5, skills y `sb chat`; probado de punta a punta |
+
+**Próximo paso:** fase 5 (traer la biblioteca existente con `sb import bib`).

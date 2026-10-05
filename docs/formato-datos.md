@@ -89,7 +89,16 @@ Campos: `citekey`, `source_pdf_sha256`, `extractor`, `extracted` (fecha), `pages
 
 ## `library/figures/{citekey}.md`
 
-Campos: `citekey`, `figures` (lista de `{id, page, kind}`) y `provenance` (procedencia del LLM). El cuerpo tiene una sección `## Fig. N (p. M)` por figura con su pie y su descripción generada.
+Campos: `citekey`, `figures` (lista de `{id, page, kind}`; `kind` es uno de `line-chart`, `bar-chart`, `scatter`, `map`, `diagram`, `photo`, `table-image`, `schematic`, `other`) y `provenance` (procedencia del LLM). El cuerpo tiene una sección por figura:
+
+```markdown
+## Fig. 3 (p. 5)
+**Pie:** Indoor air temperature for cases A and B during July.
+
+**Descripción (generada):** Gráfica de líneas…
+```
+
+En el artículo, `figures` cuenta las figuras descritas y `provenance.figures` registra el proceso. `backend: none` significa que no se encontraron pies de figura.
 
 ## `config.toml`
 

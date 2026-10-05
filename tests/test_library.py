@@ -84,3 +84,17 @@ def test_inbox_lists_only_top_level_pdfs(lib):
     (lib.inbox_dir / "_errores").mkdir()
     (lib.inbox_dir / "_errores" / "c.pdf").write_bytes(b"%PDF")
     assert [p.name for p in lib.inbox_pdfs()] == ["B.PDF", "a.pdf"]
+
+
+def test_repeated_values_have_no_yaml_aliases():
+    import datetime as dt
+
+    from second_brain.models import LlmProvenance, Provenance
+
+    day = dt.date(2026, 10, 4)
+    llm = {"backend": "claude", "model": "m", "prompt": "p", "date": day}
+    paper = make_paper(
+        provenance=Provenance(process=LlmProvenance(**llm), figures=LlmProvenance(**llm))
+    )
+    text = dump_frontmatter(paper)
+    assert "&id" not in text and "*id" not in text

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": ["Bash(uv run sb:*)"],
+    "deny": [
+      "Edit(library/papers/**)",
+      "Edit(library/fulltext/**)",
+      "Edit(library/figures/**)",
+      "Edit(library/projects/**)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "uv run --quiet sb status"}]}
+    ]
+  }
+}

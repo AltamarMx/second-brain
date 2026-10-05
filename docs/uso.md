@@ -41,6 +41,14 @@ uv run sb doctor
 | `sb project list [--kind K] [--all]` / `show SLUG` / `archive SLUG [--restore]` | Lista, detalle y archivo de proyectos |
 | `sb bib -p SLUG \| --keys K1,K2 \| --from-tex main.tex [-o refs.bib] [--format biblatex] [--strict]` | BibTeX desde los registros |
 | `sb bib sync` | Reescribe los `.bib` de `[bib_outputs]` del perfil de la máquina |
+| `sb process [KEY…] [--pending] [--stale] [--force] [--no-figures] [--backend B]` | Resumen, clasificación y figuras con el LLM del perfil |
+| `sb figures KEY` | Vuelve a describir las figuras de un artículo |
+| `sb search "tema" [filtros]` | Artículos por tema, con su "En una frase" y pasajes |
+| `sb list [filtros]` | Artículos por filtros, sin tema |
+| `sb passages "pregunta" [--paper KEY] [--refs]` | Pasajes con página y sección |
+| `sb index update/rebuild` | Índice de búsqueda (se actualiza solo) |
+| `sb agents sync` | Instala o actualiza `AGENTS.md`, skills y `.claude/settings.json` |
+| `sb chat [claude]` | Abre Claude Code en la biblioteca |
 | `sb remove KEY [--delete-pdf] [--yes]` | Elimina un artículo (el PDF pasa a `inbox/_eliminados/`) |
 
 Opciones globales: `--home RUTA` (o la variable `SB_HOME`) y `--version`.
@@ -113,6 +121,37 @@ uv run sb bib --from-tex ~/tesis/main.tex -o ~/tesis/refs.bib   # solo lo citado
   ```
 
   y ejecuta `uv run sb bib sync`.
+
+## Procesar: resumen, clasificación y figuras
+
+Al terminar `sb ingest`, cada artículo nuevo se procesa con el backend de `[process].backend` del perfil de la máquina (`claude` usa Claude Code en modo `-p`, con tu suscripción). Tarda alrededor de un minuto por artículo. Usa `--no-process` para dejarlo para después y `uv run sb process --pending` para procesar lo que falte.
+
+- **Resumen** en `library/papers/KEY.md`, con las secciones *En una frase*, *Problema y objetivo*, *Datos y métodos*, *Resultados principales*, *Conclusiones* y *Limitaciones*, y la página de cada dato.
+- **Clasificación:** tipo de estudio (`[vocab].study_type`) y sitios estudiados (país, estado o provincia, localidad), con `reviewed: false` hasta que la confirmes.
+- **Términos de búsqueda** en español e inglés, en `keywords` (si Crossref no los dio).
+- **Figuras** en `library/figures/KEY.md`. Se detectan por su pie ("Fig. 3. …"), se renderiza su página y se describen. Requiere el PDF en `pdfs/`.
+
+Todo queda con su procedencia (modelo, versión del prompt, máquina y fecha). Si editas un resumen a mano, `sb process` no lo sobrescribe sin `--force`. `--stale` rehace lo generado con una versión anterior del prompt.
+
+## Buscar
+
+```bash
+uv run sb search "ventilación nocturna" --country MX --study experimental
+uv run sb list --project tesis-doctoral --year 2015..
+uv run sb passages "temperatura de confort" --paper lopezperez2019adaptive
+```
+
+Filtros: `--project`, `--study`, `--country` (código ISO), `--region`, `--locality`, `--year` (`2019`, `2015..2024`, `2015..`, `..2020`); `sb list` acepta también `--status`. La búsqueda es léxica (BM25): conviene probar los términos en inglés. El índice vive en `.cache/index.sqlite` y se actualiza solo.
+
+## Conversar: `sb chat`
+
+```bash
+uv run sb chat
+```
+
+Abre Claude Code en la carpeta de la biblioteca con sus reglas (`AGENTS.md`: responder solo con lo que hay en la biblioteca, siempre con `[citekey, p. N]`) y cuatro skills: `sb-ingerir`, `sb-consultar`, `sb-proyectos` y `sb-bibtex`. La primera vez, Claude Code pide confiar en la carpeta: acéptalo para que pueda usar `uv run sb` sin preguntar.
+
+Ejemplos: "¿qué artículos tengo sobre confort adaptativo en México?", "¿qué temperatura de confort reporta lopezperez2019adaptive?", "crea un proyecto para mi artículo sobre X con lo que encaje y dame el bib".
 
 ## Usar `sb` desde otra carpeta
 

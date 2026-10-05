@@ -9,6 +9,9 @@ uv run sb --help        # todos los comandos
 uv run sb status        # qué hay pendiente
 uv run sb check         # validar la biblioteca
 uv run sb doctor        # diagnosticar esta máquina
+uv run sb ingest        # ingerir lo que haya en inbox/
+uv run sb search "tema" # buscar
+uv run sb chat          # conversar con la biblioteca (Claude Code)
 ```
 
 ## Carpetas

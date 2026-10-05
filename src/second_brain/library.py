@@ -38,6 +38,7 @@ def _yaml() -> YAML:
     yaml.allow_unicode = True
     yaml.width = 4096  # never wrap long titles or abstracts
     yaml.indent(mapping=2, sequence=4, offset=2)
+    yaml.representer.ignore_aliases = lambda *_: True  # no &id001 anchors for repeated values
     yaml.representer.add_representer(
         type(None), lambda r, _: r.represent_scalar("tag:yaml.org,2002:null", "null")
     )
@@ -189,6 +190,17 @@ class Library:
 
     def iter_fulltexts(self) -> Iterator[Document[FullText] | InvalidDocument]:
         return self._iter(self.fulltext_dir, FullText)
+
+    def figures_path(self, citekey: str) -> Path:
+        return self.figures_dir / f"{citekey}.md"
+
+    def read_figure_set(self, citekey: str) -> Document[FigureSet]:
+        return self._read(self.figures_path(citekey), FigureSet)
+
+    def write_figure_set(self, figure_set: FigureSet, body: str) -> Path:
+        path = self.figures_path(figure_set.citekey)
+        atomic_write(path, dump_frontmatter(figure_set, body))
+        return path
 
     def iter_figure_sets(self) -> Iterator[Document[FigureSet] | InvalidDocument]:
         return self._iter(self.figures_dir, FigureSet)

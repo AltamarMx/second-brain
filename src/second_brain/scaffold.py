@@ -84,6 +84,9 @@ def init_library(
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=home, check=True)
         report.notes.append("Inicialicé un repositorio git nuevo.")
     install_hooks(home)
+    from .agents import sync_agents
+
+    report.created += [p for p in sync_agents(home) if p not in report.created]
     report.notes.append(
         f"git usa los hooks de {HOOKS_DIRNAME}/ (sb check --fast antes de cada commit)."
     )
