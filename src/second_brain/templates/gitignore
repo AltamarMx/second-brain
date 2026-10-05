@@ -9,3 +9,5 @@ logs/
 .venv/
 # --- Secretos ---
 .env
+# --- Sistema ---
+.DS_Store

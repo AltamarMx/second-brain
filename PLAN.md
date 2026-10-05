@@ -992,12 +992,21 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 1: Ingesta desde `inbox/`
 
-- [ ] Extracción con marcas de página; detección de PDF escaneado → OCR.
-- [ ] Detección y normalización de DOI e ID de arXiv; metadatos de Crossref con validación del título.
-- [ ] Deduplicación (hash, DOI, título difuso) y re-vinculación de PDFs.
-- [ ] Citekeys; movimiento atómico a `pdfs/`; escritura de `papers/` y `fulltext/`.
-- [ ] `sb ingest` (`--dry-run`, `--doi`, `--json`), `sb show`, `sb text`.
-- [ ] Pruebas con PDFs sintéticos y respuestas HTTP grabadas (sin red).
+- [x] Extracción con marcas de página; detección de PDF escaneado → OCR.
+- [x] Detección y normalización de DOI e ID de arXiv; metadatos de Crossref con validación del título.
+- [x] Deduplicación (hash, DOI, título difuso) y re-vinculación de PDFs.
+- [x] Citekeys; movimiento atómico a `pdfs/`; escritura de `papers/` y `fulltext/`.
+- [x] `sb ingest` (`--dry-run`, `--doi`, `--json`), `sb show`, `sb text`.
+- [x] Pruebas con PDFs sintéticos y respuestas HTTP grabadas (sin red).
+
+**Terminada el 2026-10-04**, con 20 PDFs reales tomados de Zotero:
+
+- Los 17 con DOI quedaron con el DOI correcto, 16 ingeridos y 1 detectado como duplicado exacto. Cinco de ellos estaban adjuntos en Zotero al artículo equivocado, y `sb` los identificó por su contenido.
+- Los 3 sin DOI (dos portadas de ResearchGate y una tesis) quedaron en `needs_review`, con título y año aproximados. Su autor y su título definitivos se resuelven al revisarlos (fase 4).
+- Repetir la ingesta no cambia nada; volver a soltar los mismos PDFs da 20 duplicados; un PDF borrado de `pdfs/` se re-vincula por hash, sin consultar la red.
+- Unos 10 s por PDF en el iMac; ~75 KB de texto por artículo en `library/`.
+- Extras: `sb remove`, `--section` reconoce secciones numeradas, `.DS_Store` en `.gitignore`.
+- pymupdf4llm queda fijado en 0.3.x: desde 1.27.2 exige onnxruntime, que no tiene binarios para Mac Intel (ADR 0003).
 
 **Terminado cuando:** al ingerir 20 de tus PDFs reales, cada uno queda con el DOI correcto o marcado `needs_review`, no se cuela ningún duplicado, y repetir `sb ingest` no cambia nada.
 
@@ -1214,4 +1223,6 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 | 2026-10-04 | Fase 0 terminada | Paquete `sb` (init, machine, doctor, check, status), esquema v1, CI; biblioteca inicializada con perfil `imac` |
 
-**Próximo paso:** fase 1 (ingesta desde `inbox/`).
+| 2026-10-04 | Fase 1 terminada | `sb ingest`, `show`, `text`, `remove`; probado con 20 PDFs reales |
+
+**Próximo paso:** fase 2 (ingesta por DOI y descarga de PDFs).
