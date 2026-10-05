@@ -141,7 +141,8 @@ def test_bib_cli_project_and_from_tex(lib, tmp_path):
     result = runner.invoke(app, [*home, "bib", "--project", "tesis", "-o", str(out)])
     assert result.exit_code == 0, result.output
     assert "@article{garcia2021thermal," in out.read_text()
-    assert "sin cambios" in runner.invoke(app, [*home, "bib", "-p", "tesis", "-o", str(out)]).output
+    again = runner.invoke(app, [*home, "bib", "-p", "tesis", "-o", str(out)]).output
+    assert "sin cambios" in " ".join(again.split())  # rich wraps lines at 80 columns
 
     tex = tmp_path / "main.tex"
     tex.write_text(r"\cite{garcia2021thermal,falta2020x}")
