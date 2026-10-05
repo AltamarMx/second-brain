@@ -55,7 +55,7 @@ uv run sb doctor
 | `sb migrate` | Actualiza los archivos a la versión actual del esquema |
 | `sb read KEY [--status S] [--rating N] [--clear]` | Estado de lectura (por-leer, leyendo, leido) y calificación 1-5 |
 | `sb attach KEY ARCHIVO.pdf [--label L]` | Agrega material suplementario (su texto se vuelve buscable) |
-| `sb refs [KEY] [--missing] [--html grafo.html]` | Citas dentro de la biblioteca y obras que te faltan |
+| `sb refs [KEY] [--missing] [--html [-o RUTA] [--no-open]]` | Citas dentro de la biblioteca y obras que te faltan |
 | `sb check --retractions` | Consulta en Crossref retractaciones y correcciones |
 | `sb process --reclassify [KEY…]` | Vuelve a clasificar (p. ej., tras agregar campos en `config.toml`) |
 | `sb remove KEY [--delete-pdf] [--yes]` | Elimina un artículo (el PDF pasa a `inbox/_eliminados/`) |
@@ -225,7 +225,7 @@ Necesita OpenCode (`brew install opencode`), Ollama abierto y `[llm].model` en e
 
 - **Lectura:** `sb read KEY --status leido --rating 4`; luego `sb list --reading por-leer`.
 - **Retractaciones:** cada artículo con DOI guarda las notas que Crossref reporta (retracciones, correcciones, notas de preocupación, con datos de Retraction Watch). `sb check --retractions` vuelve a consultarlas; un artículo retractado queda marcado en `sb show` y los agentes lo advierten al citarlo.
-- **Citas:** `sb refs KEY` muestra a quién cita y quién lo cita dentro de tu biblioteca; `sb refs --missing` lista obras que citan dos o más de tus artículos y no tienes; `sb refs --html ~/Downloads/grafo.html` guarda el grafo como página interactiva (`open ~/Downloads/grafo.html`). Usa las referencias que publica Crossref.
+- **Citas:** `sb refs KEY` muestra a quién cita y quién lo cita dentro de tu biblioteca; `sb refs --missing` lista obras que citan dos o más de tus artículos y no tienes; `sb refs --html` guarda el grafo como página interactiva en `.cache/grafo.html` (fuera de git, se regenera en segundos) y la abre en el navegador; `-o RUTA` la guarda en otro lugar y `--no-open` no la abre. Usa las referencias que publica Crossref.
 - **Suplementos:** `sb attach KEY datos.pdf --label "Datos de monitoreo"`. El texto queda en `library/supplements/` y aparece en las búsquedas; el PDF, en `pdfs/KEY--s1.pdf`.
 - **Más campos de clasificación:** defínelos en `config.toml` (hay ejemplos comentados: clima Köppen, tipo de edificación, escala), luego `sb process --reclassify` para los artículos ya procesados y filtra con `sb list --field clima=Aw`.
 

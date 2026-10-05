@@ -18,7 +18,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - Fase 5: `sb import bib` (cualquier `.bib`; conserva citekeys, alias para claves no válidas como archivo, metadatos de Crossref si hay DOI); los PDFs se asocian a registros sin PDF también por título; `sb bib --all`; `sb migrate`.
 - Fase 6: backends `ollama` (local) y `anthropic` (API, extra opcional); `sb ask`; servidor MCP `sb-mcp`; `opencode.json` y agente `bibliotecario`; `sb chat opencode`.
 - Fase 7: búsqueda híbrida (BM25 + embeddings multilingües locales con model2vec u Ollama, fusionados con RRF) en `sb search`, `sb passages`, `sb ask` y MCP; `--mode`; `sb eval search` (recall@k y MRR).
-- Fase 8: estado de lectura y calificación (`sb read`, `--reading`); notas de Crossref y retractaciones (`sb check --retractions`); grafo de citas (`sb refs`, `--missing`, `--html`); material suplementario (`sb attach`, `sb text --supplement`); campos de clasificación configurables (`[classification.*]`, `sb process --reclassify`, `--field`).
+- Fase 8: estado de lectura y calificación (`sb read`, `--reading`); notas de Crossref y retractaciones (`sb check --retractions`); grafo de citas (`sb refs`, `--missing`, `--html`, que guarda en `.cache/grafo.html` y abre el navegador); material suplementario (`sb attach`, `sb text --supplement`); campos de clasificación configurables (`[classification.*]`, `sb process --reclassify`, `--field`).
 
 ### Cambiado
 

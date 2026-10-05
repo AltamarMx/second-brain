@@ -231,7 +231,13 @@ def test_refs_cli_html(lib, tmp_path, monkeypatch):
         "second_brain.ingest.metadata.MetadataClient.crossref_work",
         lambda self, doi, refresh=False: {"reference": []},
     )
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+    result = cli(lib, "refs", "--html")
+    default = lib.cache_dir / "grafo.html"
+    assert result.exit_code == 0 and "a2020x" in default.read_text()
+    assert opened == [default.resolve().as_uri()]
     out = tmp_path / "grafo.html"
-    result = cli(lib, "refs", "--html", str(out))
-    assert result.exit_code == 0 and "a2020x" in out.read_text()
+    assert cli(lib, "refs", "--html", "-o", str(out), "--no-open").exit_code == 0
+    assert out.is_file() and len(opened) == 1
     assert json.loads(cli(lib, "refs", "--json").output)["without_data"] == ["a2020x"]

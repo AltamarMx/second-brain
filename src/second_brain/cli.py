@@ -1610,7 +1610,9 @@ def refs(
     missing: Annotated[bool, typer.Option(help="Obras citadas por varios de tus artículos que no tienes.")] = False,
     min_count: Annotated[int, typer.Option("--min", min=1, help="Mínimo de artículos que la citan.")] = 2,
     limit: Annotated[int, typer.Option(min=1, help="Máximo de resultados.")] = 20,
-    html: Annotated[Path | None, typer.Option(help="Guardar el grafo como página interactiva (.html).")] = None,
+    html: Annotated[bool, typer.Option("--html", help="Grafo interactivo en el navegador (.cache/grafo.html).")] = False,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Con --html: dónde guardar la página.")] = None,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Con --html: abrirla en el navegador.")] = True,
     as_json: JsonOpt = False,
 ) -> None:  # fmt: skip
     """Citas dentro de la biblioteca (según Crossref): a quién cita un artículo y quién lo cita."""
@@ -1622,17 +1624,18 @@ def refs(
         _read_paper(lib, citekey)
     with console.status("Leyendo las referencias de Crossref…"):
         graph = build_graph(lib, MetadataClient(lib.cache_dir, email=config.user.email))
-    if html is not None:
+    if html:
         titles = {
             d.meta.citekey: d.meta.title
             for d in lib.iter_papers()
             if not isinstance(d, InvalidDocument)
         }
-        out = html.expanduser()
+        out = output.expanduser() if output else lib.cache_dir / "grafo.html"
+        out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(graph_html(graph, titles, min_count), encoding="utf-8")
-        console.print(
-            f"[green]✓[/] Grafo guardado en {escape(str(out))}. Ábrelo con: open {escape(str(out))}"
-        )
+        console.print(f"[green]✓[/] Grafo guardado en {escape(str(out))}")
+        if open_browser:
+            webbrowser.open(out.resolve().as_uri())
         return
     if missing:
         works = missing_works(graph, min_count, limit)
