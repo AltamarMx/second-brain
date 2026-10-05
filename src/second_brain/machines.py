@@ -30,12 +30,14 @@ class Section(BaseModel):
 
 class ProcessSection(Section):
     backend: Backend = "claude"
+    model: str | None = None  # for anthropic/claude: e.g. claude-opus-5-5; ollama uses [llm].model
 
 
 class LlmSection(Section):
     provider: str = "ollama"
     model: str | None = None
     num_ctx: int = 32768
+    base_url: str = "http://localhost:11434"
 
 
 class ChatSection(Section):

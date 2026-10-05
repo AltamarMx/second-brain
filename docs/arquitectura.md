@@ -30,7 +30,8 @@ Para quien modifique el código. El porqué de cada decisión está en `PLAN.md`
 | `bibtex.py` | BibTeX/BibLaTeX determinista desde los registros |
 | `texcite.py` | Citekeys citados en un `.tex` |
 | `processing.py` | `sb process`: resumen, clasificación y figuras; validación y procedencia |
-| `backends/` | Quién procesa: `claude_cli.py` (`claude -p` con `--json-schema`); Ollama y API llegan en la fase 6 |
+| `backends/` | Quién procesa: `claude_cli.py` (`claude -p` con `--json-schema`), `ollama.py` (API nativa con `format`), `anthropic_api.py` (SDK con salida estructurada) |
+| `ask.py` | `sb ask`: recuperación + prompt mínimo |
 | `prompts/` | Prompts versionados (`process.v1.md`, `figures.v1.md`) |
 | `index.py` | Índice SQLite FTS5: artículos y pasajes (texto y figuras), filtros, búsqueda con RRF |
 | `agents.py` | `sb agents sync`: plantillas de `templates/agents/` hacia la biblioteca |
@@ -38,7 +39,7 @@ Para quien modifique el código. El porqué de cada decisión está en `PLAN.md`
 | `citekey.py` | Generación de citekeys |
 | `reading.py` | Páginas y secciones de un texto completo |
 | `textutil.py` | Normalización de texto (ASCII, etiquetas HTML, comparación difusa) |
-| `mcp_server.py` | Servidor MCP (fase 6; por ahora es un marcador) |
+| `mcp_server.py` | Servidor MCP `sb-mcp` (SDK `mcp` 2.x, stdio): las mismas funciones como herramientas |
 | `templates/` | Esqueleto de un repositorio de datos |
 
 ## Reglas

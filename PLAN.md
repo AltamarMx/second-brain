@@ -1070,10 +1070,17 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 6: LLM local, MCP y OpenCode
 
-- [ ] Backends `ollama` y `anthropic`; `sb ask`.
-- [ ] Servidor MCP `sb-mcp`, `.mcp.json` y `opencode.json`.
-- [ ] `sb chat opencode`, agente `bibliotecario`, `num_ctx` ampliado.
+- [x] Backends `ollama` y `anthropic`; `sb ask`.
+- [x] Servidor MCP `sb-mcp` y `opencode.json` (para Claude Code, el MCP se registra a nivel usuario; dentro de la biblioteca Claude ya usa `sb` con las skills).
+- [x] `sb chat opencode`, agente `bibliotecario`, `num_ctx` ampliado (variante del modelo en Ollama).
 - [ ] Elegir modelos y medir tiempos en el iMac y en la M5; documentar en `docs/maquinas.md`.
+
+**Terminada en lo que se puede probar en el iMac (2026-10-04).** Por decisión del usuario, del modelo local basta con que funcione y la prioridad es Claude.
+
+- Claude: `sb ask` en ~11 s con citas. Desde otro repositorio, Claude Code consultó la biblioteca por MCP sin permisos denegados.
+- Local: `sb ask` con gemma4 (8B, CPU) funciona y cita correctamente, en ~5 min.
+- `anthropic` solo está probado con un cliente simulado (no hay API key).
+- Pendiente en la M5: instalar OpenCode y probar `sb chat opencode`.
 
 **Terminado cuando:** en la M5, sin internet, puedes procesar artículos, buscar, pedir detalles con citas y obtener el BibTeX de un proyecto con OpenCode + Ollama.
 
@@ -1256,4 +1263,6 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 | 2026-10-04 | Fase 5 terminada | `sb import bib` con alias de citekeys; asociación de PDFs por título; esquema 2 |
 
-**Próximo paso:** fase 6 (LLM local con Ollama, MCP y OpenCode).
+| 2026-10-04 | Fase 6 (iMac) | Ollama y API de Anthropic como backends, `sb ask`, servidor MCP, OpenCode preparado; la prioridad es Claude; OpenCode pendiente de probar en la M5 |
+
+**Próximo paso:** fase 7 (búsqueda semántica) o volver a la descarga por DOI (pendiente).

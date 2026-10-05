@@ -27,13 +27,27 @@ class Backend(Protocol):
         ...
 
 
-def get_backend(name: str) -> Backend:
+def get_backend(name: str, profile: Any = None, env: dict[str, str] | None = None) -> Backend:
+    """``profile`` is the machine profile (``MachineProfile``); ``env`` the values of ``.env``."""
+    env = env or {}
+    process_model = getattr(getattr(profile, "process", None), "model", None)
     if name == "claude":
         from .claude_cli import ClaudeCliBackend
 
-        return ClaudeCliBackend()
+        return ClaudeCliBackend(model=process_model)
+    if name == "ollama":
+        from .ollama import OllamaBackend
+
+        llm = getattr(profile, "llm", None)
+        if llm is None or not llm.model:
+            raise BackendError("falta [llm].model en el perfil de la máquina (p. ej., gemma4)")
+        return OllamaBackend(llm.model, llm.base_url, llm.num_ctx)
+    if name == "anthropic":
+        from .anthropic_api import AnthropicApiBackend
+
+        return AnthropicApiBackend(api_key=env.get("ANTHROPIC_API_KEY"), model=process_model)
     if name == "none":
         raise BackendError(
             'el perfil de esta máquina tiene backend = "none": no se procesan artículos aquí'
         )
-    raise BackendError(f"el backend '{name}' llegará en la fase 6; por ahora usa \"claude\"")
+    raise BackendError(f"backend desconocido: '{name}' (claude, ollama, anthropic o none)")

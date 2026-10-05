@@ -231,7 +231,7 @@ def test_cli_process_pending_and_search(lib, paper, monkeypatch):
     from second_brain.scaffold import init_machine
 
     init_machine(lib.home, "test-machine")
-    monkeypatch.setattr(cli, "get_backend", lambda name: FakeBackend())
+    monkeypatch.setattr(cli, "get_backend", lambda *args, **kwargs: FakeBackend())
     runner = CliRunner()
     home = ["--home", str(lib.home)]
     result = runner.invoke(cli.app, [*home, "process", "--pending", "--json"])

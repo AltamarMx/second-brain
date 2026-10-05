@@ -24,7 +24,7 @@ from . import projects as proj
 from .agents import sync_agents
 from .backends import BackendError, get_backend
 from .checks import run_checks
-from .config import HomeNotFoundError, find_home, load_config
+from .config import HomeNotFoundError, find_home, load_config, load_env
 from .doctor import library_status, run_doctor
 from .fetch.download import Fetcher
 from .index import Filters, SearchIndex
@@ -308,7 +308,7 @@ def _process_keys(
             )
         return {}
     try:
-        backend = get_backend(name)
+        backend = get_backend(name, profile, load_env(lib.home))
     except BackendError as exc:
         if not quiet:
             console.print(f"[red]✗[/] {escape(str(exc))}")
@@ -1176,8 +1176,8 @@ def chat(
     profile = load_profile(home, detect_machine_name())
     agent = agent or (profile.chat.agent if profile else "claude")
     if agent == "opencode":
-        console.print("OpenCode con modelo local llega en la fase 6. Por ahora: sb chat claude")
-        raise typer.Exit(1)
+        _chat_opencode(home, profile)
+        return
     if agent != "claude":
         console.print(f"[red]✗[/] agente desconocido: {escape(agent)}")
         raise typer.Exit(2)
@@ -1256,3 +1256,101 @@ def migrate(ctx: typer.Context) -> None:
     """Reescribe artículos y proyectos con la versión actual del esquema de datos."""
     changed = Library(_home(ctx)).migrate()
     console.print(f"[green]✓[/] {changed} archivos actualizados al esquema actual")
+
+
+def _chat_opencode(home: Path, profile) -> None:
+    """OpenCode with this machine's Ollama model (context window enlarged) and the MCP server."""
+    from .backends.ollama import OllamaBackend
+
+    if shutil.which("opencode") is None:
+        console.print(
+            "[red]✗[/] no encontré OpenCode (`opencode`). Instálalo: brew install opencode"
+        )
+        raise typer.Exit(1)
+    llm = profile.llm if profile else None
+    if llm is None or not llm.model:
+        console.print(
+            "[red]✗[/] falta [bold]\\[llm].model[/] en el perfil de esta máquina (p. ej., gemma4)"
+        )
+        raise typer.Exit(1)
+    ollama = OllamaBackend(llm.model, llm.base_url, llm.num_ctx)
+    if not ollama.running():
+        console.print("[red]✗[/] Ollama no está abierto: ábrelo (o `ollama serve`) y reintenta")
+        raise typer.Exit(1)
+    variant = f"{llm.model.replace(':', '-')}-sb{llm.num_ctx // 1024}k"
+    created = ollama.client.post(
+        f"{ollama.base_url}/api/create",
+        json={
+            "model": variant,
+            "from": llm.model,
+            "parameters": {"num_ctx": llm.num_ctx},
+            "stream": False,
+        },
+    )
+    if created.status_code != 200:
+        console.print(f"[red]✗[/] no pude preparar {variant}: {escape(created.text[:200])}")
+        raise typer.Exit(1)
+    sync_agents(home)
+    machine_config = home / ".cache" / "opencode.machine.json"
+    machine_config.parent.mkdir(parents=True, exist_ok=True)
+    machine_config.write_text(
+        json.dumps(
+            {
+                "model": f"ollama/{variant}",
+                "default_agent": "bibliotecario",
+                "provider": {
+                    "ollama": {
+                        "models": {variant: {"name": f"{llm.model} ({llm.num_ctx // 1024}k)"}}
+                    }
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    console.print(f"Abriendo OpenCode con [bold]{variant}[/] y las herramientas de la biblioteca…")
+    os.chdir(home)
+    os.environ["OPENCODE_CONFIG"] = str(machine_config)
+    os.execvp("opencode", ["opencode"])
+
+
+@app.command()
+def ask(
+    ctx: typer.Context,
+    question: Annotated[str, typer.Argument(help="La pregunta.")],
+    paper: Annotated[str | None, typer.Option(help="Solo sobre este artículo.")] = None,
+    backend: Annotated[str | None, typer.Option(help="ollama, claude o anthropic (por defecto, del perfil).")] = None,
+    project: ProjectOpt = None, study: StudyOpt = None, country: CountryOpt = None,
+    as_json: JsonOpt = False,
+) -> None:  # fmt: skip
+    """Pregunta suelta respondida con la biblioteca (sin abrir chat), con citas de página."""
+    from .ask import ask as ask_library
+
+    lib = Library(_home(ctx))
+    profile = load_profile(lib.home, detect_machine_name())
+    if backend is None:
+        uses_local = profile is not None and profile.llm.provider == "ollama" and profile.llm.model
+        backend = "ollama" if uses_local else (profile.process.backend if profile else "claude")
+    try:
+        llm = get_backend(backend, profile, load_env(lib.home))
+    except BackendError as exc:
+        console.print(f"[red]✗[/] {escape(str(exc))}")
+        raise typer.Exit(1) from exc
+    config = load_config(lib.home)
+    language = {"es": "español", "en": "inglés"}.get(config.library.summary_language, "español")
+    filters = _filters(project, study, country, None, None, None)
+    try:
+        if as_json:
+            answer = ask_library(lib, llm, question, filters, paper, language)
+        else:
+            with console.status(f"Buscando y preguntando a {llm.name}…"):
+                answer = ask_library(lib, llm, question, filters, paper, language)
+    except BackendError as exc:
+        console.print(f"[red]✗[/] {escape(str(exc))}")
+        raise typer.Exit(1) from exc
+    if as_json:
+        print(json.dumps(dataclasses.asdict(answer), ensure_ascii=False, indent=2))
+        return
+    console.print(escape(answer.answer))
+    cited = ", ".join(answer.citekeys) or "ninguno"
+    console.print(f"\n[dim]Artículos citados: {escape(cited)} · modelo: {escape(answer.model)}[/]")

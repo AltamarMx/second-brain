@@ -48,7 +48,8 @@ uv run sb doctor
 | `sb passages "pregunta" [--paper KEY] [--refs]` | Pasajes con página y sección |
 | `sb index update/rebuild` | Índice de búsqueda (se actualiza solo) |
 | `sb agents sync` | Instala o actualiza `AGENTS.md`, skills y `.claude/settings.json` |
-| `sb chat [claude]` | Abre Claude Code en la biblioteca |
+| `sb chat [claude \| opencode]` | Abre Claude Code (o OpenCode con el modelo local) en la biblioteca |
+| `sb ask "pregunta" [--paper KEY] [--backend B]` | Pregunta suelta, respondida con citas, sin abrir chat |
 | `sb import bib ARCHIVO.bib [--project P] [--dry-run]` | Registra las entradas de un `.bib` existente, conservando sus citekeys |
 | `sb bib --all` | BibTeX de toda la biblioteca |
 | `sb migrate` | Actualiza los archivos a la versión actual del esquema |
@@ -169,6 +170,40 @@ cp carpeta-con-pdfs/*.pdf inbox/ && uv run sb ingest   # cada PDF se asocia a su
 - Si el artículo ya estaba en la biblioteca con otra clave, se agrega esa clave como alias.
 - Los PDFs se asocian por DOI o, si no tienen, por título, año y primer autor.
 - Por proyectos: exporta un `.bib` por grupo o colección e impórtalo con `--project`.
+
+## Pregunta suelta: `sb ask`
+
+```bash
+uv run sb ask "¿qué temperatura de confort reportan en clima cálido húmedo?"
+uv run sb ask "¿qué software usaron?" --paper lopezperez2019adaptive
+```
+
+Busca los resúmenes y pasajes más relevantes (agrega los términos de búsqueda en español e inglés de esos artículos) y le pide al modelo una respuesta con `[citekey, p. N]`. Si el perfil tiene `[llm].model`, usa Ollama; si no, el backend de `[process]` (Claude). `--backend claude|ollama|anthropic` lo fuerza.
+
+## Backends
+
+| Backend | Para qué | Requisitos |
+|---|---|---|
+| `claude` | Procesar y preguntar con tu suscripción de Claude Code | `claude` instalado |
+| `ollama` | Todo en local, sin internet | Ollama abierto y `[llm].model` en el perfil (`model = "gemma4"`); para figuras, un modelo con visión |
+| `anthropic` | Lotes grandes con API key | `ANTHROPIC_API_KEY` en `.env` y `uv add "second-brain[anthropic]"` en la biblioteca |
+| `none` | Esta máquina no procesa | — |
+
+## La biblioteca desde otros repositorios (MCP)
+
+`sb-mcp` expone la biblioteca como herramientas (`search_papers`, `get_paper`, `search_passages`, `get_fulltext`, `export_bibtex`, `create_project`…). Para usarla desde Claude Code en el repo de cualquiera de tus artículos:
+
+```bash
+claude mcp add --scope user second-brain -e SB_HOME=$HOME/biblioteca -- uv run --quiet --project $HOME/biblioteca sb-mcp
+```
+
+## OpenCode con modelo local
+
+```bash
+uv run sb chat opencode
+```
+
+Necesita OpenCode (`brew install opencode`), Ollama abierto y `[llm].model` en el perfil de la máquina. `sb` crea en Ollama una variante del modelo con el contexto de `[llm].num_ctx` (por defecto 32k, que OpenCode necesita para usar herramientas) y abre OpenCode con el agente `bibliotecario`, que solo consulta mediante el servidor MCP.
 
 ## Usar `sb` desde otra carpeta
 

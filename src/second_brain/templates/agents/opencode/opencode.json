@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": { "baseURL": "http://localhost:11434/v1" }
+    }
+  },
+  "mcp": {
+    "second-brain": {
+      "type": "local",
+      "command": ["uv", "run", "--quiet", "sb-mcp"],
+      "enabled": true
+    }
+  }
+}

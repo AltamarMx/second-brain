@@ -75,6 +75,18 @@ def sync_agents(home: Path) -> list[Path]:
             _template(f"skills/{skill}/SKILL.md"),
             changed,
         )
+    opencode = home / "opencode.json"
+    current_oc = json.loads(opencode.read_text(encoding="utf-8")) if opencode.exists() else {}
+    ours_oc = json.loads(_template("opencode/opencode.json"))
+    merged_oc = {**ours_oc, **current_oc}
+    for key in ("provider", "mcp"):  # keep the user's entries, refresh ours
+        merged_oc[key] = {**current_oc.get(key, {}), **ours_oc[key]}
+    _write_if_changed(opencode, json.dumps(merged_oc, indent=2, ensure_ascii=False) + "\n", changed)
+    _write_if_changed(
+        home / ".opencode" / "agents" / "bibliotecario.md",
+        _template("opencode/bibliotecario.md"),
+        changed,
+    )
     settings = home / ".claude" / "settings.json"
     current = json.loads(settings.read_text(encoding="utf-8")) if settings.exists() else {}
     _write_if_changed(
