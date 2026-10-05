@@ -37,6 +37,9 @@ Para quien modifique el código. El porqué de cada decisión está en `PLAN.md`
 | `embeddings.py` | Embeddings: model2vec (en proceso) u Ollama |
 | `agents.py` | `sb agents sync`: plantillas de `templates/agents/` hacia la biblioteca |
 | `import_bib.py` | `sb import bib`: leer un `.bib` (bibtexparser + pylatexenc), alias, duplicados |
+| `citations.py` | Grafo de citas desde las referencias de Crossref; página interactiva |
+| `retractions.py` | `sb check --retractions` |
+| `supplements.py` | `sb attach`: material suplementario |
 | `citekey.py` | Generación de citekeys |
 | `reading.py` | Páginas y secciones de un texto completo |
 | `textutil.py` | Normalización de texto (ASCII, etiquetas HTML, comparación difusa) |

@@ -26,5 +26,23 @@ vpn_hint = $vpn_hint                    # se muestra cuando una descarga pide au
 max_downloads_per_run = 30
 seconds_between_downloads = 10
 
+# Campos de clasificación adicionales, que el LLM llena al procesar (y `sb process --reclassify`
+# llena en los artículos ya procesados). Descomenta o agrega los que te sirvan:
+#
+# [classification.clima]
+# label = "Clima (Köppen)"
+# description = "Clasificación climática de Köppen-Geiger del sitio estudiado (p. ej. Aw, BWh, Cfa)"
+#
+# [classification.edificacion]
+# label = "Tipo de edificación"
+# description = "Uso del edificio o edificios estudiados"
+# values = ["vivienda", "oficinas", "educativo", "salud", "comercial", "industrial", "otro"]
+# multiple = true
+#
+# [classification.escala]
+# label = "Escala"
+# description = "Escala del análisis"
+# values = ["material", "componente", "edificio", "barrio", "ciudad", "region"]
+
 [checks]
 max_file_mb = 10

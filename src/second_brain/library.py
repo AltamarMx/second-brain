@@ -19,7 +19,7 @@ from pydantic import BaseModel, ValidationError
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
 
-from .models import SCHEMA_VERSION, FigureSet, FullText, Paper, Project
+from .models import SCHEMA_VERSION, FigureSet, FullText, Paper, Project, SupplementText
 
 FRONTMATTER_DELIMITER = "---"
 
@@ -114,6 +114,7 @@ class Library:
         self.papers_dir = self.library_dir / "papers"
         self.fulltext_dir = self.library_dir / "fulltext"
         self.figures_dir = self.library_dir / "figures"
+        self.supplements_dir = self.library_dir / "supplements"
         self.notes_dir = self.library_dir / "notes"
         self.projects_dir = self.library_dir / "projects"
         self.inbox_dir = home / "inbox"
@@ -221,13 +222,31 @@ class Library:
                 changed += 1
         return changed
 
+    def supplement_path(self, citekey: str, supplement_id: str) -> Path:
+        return self.supplements_dir / f"{citekey}--{supplement_id}.md"
+
+    def supplement_pdf(self, citekey: str, supplement_id: str) -> Path:
+        return self.pdfs_dir / f"{citekey}--{supplement_id}.pdf"
+
+    def read_supplement(self, citekey: str, supplement_id: str) -> Document[SupplementText]:
+        return self._read(self.supplement_path(citekey, supplement_id), SupplementText)
+
+    def write_supplement(self, text: SupplementText, body: str) -> Path:
+        path = self.supplement_path(text.citekey, text.id)
+        atomic_write(path, dump_frontmatter(text, body))
+        return path
+
+    def iter_supplements(self) -> Iterator[Document[SupplementText] | InvalidDocument]:
+        return self._iter(self.supplements_dir, SupplementText)
+
     def remove_paper(self, citekey: str) -> list[Path]:
-        """Delete the record, its full text and figures. Notes and the PDF are left alone."""
+        """Delete the record, its full text, figures and supplement texts. Notes and PDFs are left alone."""
         removed = []
         for path in (
             self.paper_path(citekey),
             self.fulltext_path(citekey),
             self.figures_dir / f"{citekey}.md",
+            *sorted(self.supplements_dir.glob(f"{citekey}--s*.md")),
         ):
             if path.exists():
                 path.unlink()

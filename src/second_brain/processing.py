@@ -21,13 +21,14 @@ from typing import Any, Literal
 import pymupdf
 
 from .backends import Backend, BackendError
-from .config import LibraryConfig
+from .config import ExtraField, LibraryConfig
 from .library import Library
 from .models import Classification, FigureRef, FigureSet, LlmProvenance, Paper
 from .reading import split_pages
 
 PROCESS_PROMPT = "process.v1"
 FIGURES_PROMPT = "figures.v1"
+CLASSIFY_PROMPT = "classify.v1"
 MAX_TEXT_CHARS = 400_000  # ~100k tokens; longer documents are truncated (noted in the result)
 MAX_FIGURE_PAGES = 12
 FIGURE_DPI = 110
@@ -72,8 +73,64 @@ def body_hash(body: str) -> str:
     return hashlib.sha256(body.strip().encode()).hexdigest()
 
 
-def process_schema(study_types: list[str]) -> dict[str, Any]:
+def extra_schema(fields: dict[str, ExtraField]) -> dict[str, Any]:
+    properties = {}
+    for name, spec in fields.items():
+        value: dict[str, Any] = (
+            {"type": "string", "enum": spec.values} if spec.values else {"type": "string"}
+        )
+        properties[name] = (
+            {"type": "array", "items": value}
+            if spec.multiple
+            else {"anyOf": [value, {"type": "null"}]}
+        )
+    return {"type": "object", "properties": properties, "required": list(fields)}
+
+
+def extra_instructions(fields: dict[str, ExtraField]) -> str:
+    if not fields:
+        return ""
+    lines = ["", "Campos adicionales de la clasificación (en classification.extra):"]
+    for name, spec in fields.items():
+        allowed = f" Valores permitidos: {', '.join(spec.values)}." if spec.values else ""
+        many = " Puede tener varios valores (lista)." if spec.multiple else " Un solo valor o null."
+        lines.append(f"- {name} ({spec.label}): {spec.description}.{allowed}{many}")
+    return "\n".join(lines)
+
+
+def classification_schema(
+    study_types: list[str], extra: dict[str, ExtraField] | None = None
+) -> dict[str, Any]:
     nullable = {"type": ["string", "null"]}
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "study_type": {"type": "string", "enum": study_types},
+            "locations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "country": {"type": ["string", "null"], "pattern": "^[A-Z]{2}$"},
+                        "region": nullable,
+                        "locality": nullable,
+                        "page": {"type": ["integer", "null"]},
+                    },
+                    "required": ["country", "region", "locality", "page"],
+                },
+            },
+        },
+        "required": ["study_type", "locations"],
+    }
+    if extra:
+        schema["properties"]["extra"] = extra_schema(extra)
+        schema["required"].append("extra")
+    return schema
+
+
+def process_schema(
+    study_types: list[str], extra: dict[str, ExtraField] | None = None
+) -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {
@@ -89,26 +146,7 @@ def process_schema(study_types: list[str]) -> dict[str, Any]:
                 },
                 "required": list(SECTION_TITLES),
             },
-            "classification": {
-                "type": "object",
-                "properties": {
-                    "study_type": {"type": "string", "enum": study_types},
-                    "locations": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "country": {"type": ["string", "null"], "pattern": "^[A-Z]{2}$"},
-                                "region": nullable,
-                                "locality": nullable,
-                                "page": {"type": ["integer", "null"]},
-                            },
-                            "required": ["country", "region", "locality", "page"],
-                        },
-                    },
-                },
-                "required": ["study_type", "locations"],
-            },
+            "classification": classification_schema(study_types, extra),
             "search_terms": {"type": "array", "items": {"type": "string"}},
         },
         "required": ["summary", "classification", "search_terms"],
@@ -284,20 +322,16 @@ class Processor:
             text = text[:MAX_TEXT_CHARS]
             result.notes.append("texto muy largo: se resumió solo el inicio")
         vocab = self.config.vocab.study_type
+        extra = self.config.classification
         prompt = prompt_text(
             self.config.library.process_prompt,
             language=_language(self.config.library.summary_language),
             study_types=", ".join(f'"{v}"' for v in vocab),
-        )
+        ) + extra_instructions(extra)
         header = f"Título: {paper.title}\n\n"
-        output, model = self.backend.run(prompt, process_schema(vocab), stdin=header + text)
+        output, model = self.backend.run(prompt, process_schema(vocab, extra), stdin=header + text)
         body = summary_markdown(output["summary"])
-        raw = output["classification"]
-        if raw["study_type"] not in vocab:
-            raise ProcessingError(f"tipo de estudio inválido: {raw['study_type']}")
-        classification = Classification.model_validate(
-            {"study_type": raw["study_type"], "locations": raw["locations"], "reviewed": False}
-        )
+        classification = self._classification(output["classification"])
         keywords = paper.keywords or _unique(output.get("search_terms", []))[:12]
         provenance = paper.provenance.model_copy(
             update={"process": self._provenance(model, self.config.library.process_prompt, body)}
@@ -310,6 +344,64 @@ class Processor:
             }
         )
         return updated, body
+
+    def _classification(self, raw: dict[str, Any]) -> Classification:
+        vocab = self.config.vocab.study_type
+        if raw["study_type"] not in vocab:
+            raise ProcessingError(f"tipo de estudio inválido: {raw['study_type']}")
+        extra = {}
+        for name, spec in self.config.classification.items():
+            value = (raw.get("extra") or {}).get(name)
+            values = value if isinstance(value, list) else [value] if value else []
+            if spec.values:
+                values = [
+                    v for v in values if v in spec.values
+                ]  # drop anything outside the vocabulary
+            extra[name] = values if spec.multiple else (values[0] if values else None)
+        return Classification.model_validate(
+            {
+                "study_type": raw["study_type"],
+                "locations": raw["locations"],
+                "extra": extra,
+                "reviewed": False,
+            }
+        )
+
+    def reclassify(self, citekey: str) -> ProcessResult:
+        """Only the classification (e.g. after adding fields to config.toml); the summary is kept."""
+        result = ProcessResult(citekey, "skipped")
+        try:
+            doc = self.lib.read_paper(citekey)
+            if not self.lib.fulltext_path(citekey).is_file():
+                raise ProcessingError("no tiene texto completo (¿le falta el PDF?)")
+            text = self.lib.read_fulltext(citekey).body[:MAX_TEXT_CHARS]
+            vocab = self.config.vocab.study_type
+            extra = self.config.classification
+            prompt = prompt_text(
+                CLASSIFY_PROMPT, study_types=", ".join(f'"{v}"' for v in vocab)
+            ) + extra_instructions(extra)
+            schema = {
+                "type": "object",
+                "properties": {"classification": classification_schema(vocab, extra)},
+                "required": ["classification"],
+            }
+            output, model = self.backend.run(
+                prompt, schema, stdin=f"Título: {doc.meta.title}\n\n{text}"
+            )
+            provenance = doc.meta.provenance.model_copy(
+                update={"classification": self._provenance(model, CLASSIFY_PROMPT)}
+            )
+            paper = doc.meta.model_copy(
+                update={
+                    "classification": self._classification(output["classification"]),
+                    "provenance": provenance,
+                }
+            )
+            self.lib.write_paper(paper, doc.body)
+            result.outcome, result.message = "processed", "clasificación"
+        except (ProcessingError, BackendError) as exc:
+            result.outcome, result.message = "error", str(exc)
+        return result
 
     def _describe_figures(self, paper: Paper, fulltext: str, result: ProcessResult) -> Paper:
         captions = find_captions(fulltext)

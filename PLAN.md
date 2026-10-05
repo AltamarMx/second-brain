@@ -1106,11 +1106,13 @@ Con los resúmenes en español la búsqueda por palabras ya era buena. Los embed
 ### Fase 8: Extras (según necesidad)
 
 - [ ] **Pendiente (2026-10-04): retomar la ingesta por DOI con descarga automática.** Funciona, pero casi todas las editoriales bloquean robots (ver fase 2). Por ahora el usuario descarga los PDFs y los suelta en `inbox/`. Al retomarlo: configurar `[user].email` (Unpaywall) y evaluar las APIs oficiales de las editoriales.
-- [ ] Más campos de clasificación (clima Köppen, tipo de edificación, escala) y `sb process --reclassify`.
-- [ ] Grafo de citas dentro de la biblioteca: "¿qué artículos muy citados por mi biblioteca me faltan?".
-- [ ] Alerta de retractaciones en `sb check --retractions` (Crossref publica los datos de Retraction Watch).
-- [ ] Material suplementario (varios PDFs por artículo).
-- [ ] Estado de lectura (por leer / leído) y calificación.
+- [x] Más campos de clasificación (clima Köppen, tipo de edificación, escala) y `sb process --reclassify`.
+- [x] Grafo de citas dentro de la biblioteca: "¿qué artículos muy citados por mi biblioteca me faltan?".
+- [x] Alerta de retractaciones en `sb check --retractions` (Crossref publica los datos de Retraction Watch).
+- [x] Material suplementario (varios PDFs por artículo).
+- [x] Estado de lectura (por leer / leído) y calificación.
+
+**Terminada el 2026-10-05** (salvo la descarga por DOI, que sigue pendiente). En la biblioteca del usuario, `sb refs --missing` ya muestra obras que citan tres de sus artículos (p. ej., Al-Hazmy 2006) y `sb refs --html` genera el grafo interactivo. Los campos de clasificación extra vienen como ejemplos comentados en `config.toml`: se activan cuando el usuario los necesite.
 
 ---
 
@@ -1279,4 +1281,6 @@ Con los resúmenes en español la búsqueda por palabras ya era buena. Los embed
 
 | 2026-10-04 | Fase 7 terminada | Búsqueda híbrida con embeddings locales (model2vec); `sb eval search`; recall@1 0.71 → 0.79 |
 
-**Próximo paso:** fase 8 (extras) o retomar la descarga por DOI (pendiente).
+| 2026-10-05 | Fase 8 terminada | Lectura, retractaciones, grafo de citas (con página interactiva), suplementos, campos de clasificación configurables; esquema 3 |
+
+**Próximo paso:** retomar la descarga por DOI (pendiente) cuando el usuario lo pida; probar OpenCode en la M5.

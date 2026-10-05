@@ -22,7 +22,8 @@ Este repositorio es una biblioteca personal de artículos científicos. Se manej
 7. Ante un DOI dudoso, un posible duplicado, la creación de un proyecto o borrar algo, **pregunta antes**.
 8. Si una descarga falla por acceso, pide al usuario que active el VPN de su institución; nunca intentes esquivar un bloqueo.
 9. No abras PDFs si existe el texto completo.
-10. Commits solo cuando el usuario lo pida, con mensajes `ingest: …`, `project: …`, `process: …`.
+10. Si un artículo tiene el flag `retracted` o `expression_of_concern` (en `sb show`), **avísalo cada vez que lo menciones o lo cites**.
+11. Commits solo cuando el usuario lo pida, con mensajes `ingest: …`, `project: …`, `process: …`.
 
 ## Flujos
 

@@ -30,6 +30,7 @@ class LibraryIndex:
     def __init__(self) -> None:
         self.papers: dict[str, Paper] = {}
         self.by_sha: dict[str, str] = {}
+        self.by_supplement_sha: dict[str, tuple[str, str]] = {}
         self.by_doi: dict[str, str] = {}
         self.entries: list[Entry] = []
 
@@ -45,6 +46,8 @@ class LibraryIndex:
         self.papers[paper.citekey] = paper
         if paper.pdf:
             self.by_sha[paper.pdf.sha256] = paper.citekey
+        for supplement in paper.supplements:
+            self.by_supplement_sha[supplement.sha256] = (paper.citekey, supplement.id)
         if paper.doi:
             self.by_doi[normalize_doi(paper.doi)] = paper.citekey
         self.entries = [e for e in self.entries if e.citekey != paper.citekey]

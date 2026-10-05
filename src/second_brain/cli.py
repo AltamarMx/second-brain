@@ -189,10 +189,15 @@ def check(
     fast: Annotated[
         bool, typer.Option(help="Omite textos completos y figuras (para el hook de git).")
     ] = False,
+    retractions: Annotated[
+        bool, typer.Option(help="Consultar en Crossref retractaciones y correcciones (usa la red).")
+    ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
 ) -> None:
     """Valida la biblioteca: esquema, vocabularios, DOIs, proyectos, tamaños y PDFs fuera de git."""
     home = _home(ctx)
+    if retractions:
+        _check_retractions(home, as_json)
     report = run_checks(home, fast=fast)
     if as_json:
         print(
@@ -473,6 +478,32 @@ def show(
     console.print(f"[dim]{citekey} · {paper.status}{flags}[/]")
     if paper.projects:
         console.print("Proyectos: " + ", ".join(paper.projects))
+    if "retracted" in paper.flags or "expression_of_concern" in paper.flags:
+        notice = (
+            "RETRACTADO"
+            if "retracted" in paper.flags
+            else "con nota de preocupación (expression of concern)"
+        )
+        console.print(f"[bold red]⚠ Este artículo está {notice}[/]")
+    for update in paper.updates:
+        console.print(
+            f"[dim]Nota de Crossref: {update.type} {update.date or ''} {update.doi or ''}[/]"
+        )
+    if paper.reading or paper.rating:
+        stars = "★" * (paper.rating or 0)
+        console.print(f"Lectura: {paper.reading or '-'} {stars}")
+    extra = {k: v for k, v in paper.classification.extra.items() if v}
+    if extra:
+        console.print(
+            "Clasificación: "
+            + "; ".join(
+                f"{k}: {v if isinstance(v, str) else ', '.join(v)}" for k, v in extra.items()
+            )
+        )
+    for supplement in paper.supplements:
+        console.print(
+            f"Suplemento {supplement.id}: {escape(supplement.label or supplement.original_filename or '')} ({supplement.pages} pp.)"
+        )
     console.print(f"PDF local: {local_pdf if local_pdf.exists() else 'no está en esta máquina'}")
     console.print()
     console.print(escape(doc.body) if doc.body else "[dim](sin resumen todavía)[/]")
@@ -486,14 +517,25 @@ def text(
     section: Annotated[
         str | None, typer.Option(help="Sección cuyo encabezado contiene este texto.")
     ] = None,
+    supplement: Annotated[
+        str | None, typer.Option(help="Texto de un suplemento (s1, s2…).")
+    ] = None,
 ) -> None:
-    """Texto completo de un artículo, o solo algunas páginas o una sección."""
+    """Texto completo de un artículo (o de un suplemento), o solo algunas páginas o una sección."""
     lib = Library(_home(ctx))
     _read_paper(lib, citekey)
-    if not lib.fulltext_path(citekey).is_file():
+    if supplement:
+        if not lib.supplement_path(citekey, supplement).is_file():
+            console.print(
+                f"[red]✗[/] {escape(citekey)} no tiene el suplemento {escape(supplement)}"
+            )
+            raise typer.Exit(1)
+        body = lib.read_supplement(citekey, supplement).body
+    elif not lib.fulltext_path(citekey).is_file():
         console.print(f"[red]✗[/] {escape(citekey)} no tiene texto completo (¿falta su PDF?)")
         raise typer.Exit(1)
-    body = lib.read_fulltext(citekey).body
+    else:
+        body = lib.read_fulltext(citekey).body
     if pages:
         try:
             body = select_pages(body, pages)
@@ -967,12 +1009,19 @@ def process(
     ] = False,
     figures: Annotated[bool, typer.Option(help="Describir las figuras.")] = True,
     backend: Annotated[str | None, typer.Option(help="Forzar un backend (claude, none…).")] = None,
+    reclassify: Annotated[
+        bool,
+        typer.Option(help="Solo volver a clasificar (p. ej., tras agregar campos en config.toml)."),
+    ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
 ) -> None:
     """Resumen, clasificación y descripción de figuras con el LLM del perfil de la máquina."""
     lib = Library(_home(ctx))
     config = load_config(lib.home)
     keys = list(citekeys or [])
+    if reclassify:
+        _reclassify(lib, keys, as_json, backend)
+        return
     if pending or stale:
         dummy = Processor(lib, config, backend=None, machine="")  # type: ignore[arg-type]
         for doc in lib.iter_papers():
@@ -1041,13 +1090,28 @@ def _index_warning(index: SearchIndex, as_json: bool) -> None:
         err_console.print(f"[yellow]![/] {escape(index.warning)}")
 
 
-def _filters(project, study, country, region, locality, year, status=None) -> Filters:
+ReadingOpt = Annotated[
+    str | None, typer.Option(help="Estado de lectura: por-leer, leyendo, leido.")
+]
+FieldOpt = Annotated[
+    list[str] | None,
+    typer.Option("--field", help="Campo de clasificación extra: nombre=valor (repetible)."),
+]
+
+
+def _filters(
+    project, study, country, region, locality, year, status=None, reading=None, fields=None
+) -> Filters:
     try:
         start, end = Filters.parse_years(year)
     except ValueError as exc:
         console.print(f"[red]✗[/] {escape(str(exc))}")
         raise typer.Exit(2) from exc
-    return Filters(project, study, country, region, locality, start, end, status)
+    pairs = tuple(f.replace(" ", "_") for f in fields or [])
+    if any("=" not in p for p in pairs):
+        console.print("[red]✗[/] --field se escribe nombre=valor (p. ej., --field clima=Aw)")
+        raise typer.Exit(2)
+    return Filters(project, study, country, region, locality, start, end, status, reading, pairs)
 
 
 def _print_hits(hits, show_passages: bool) -> None:
@@ -1073,14 +1137,14 @@ def search(
     region: RegionOpt = None, locality: LocalityOpt = None, year: YearOpt = None,
     limit: Annotated[int, typer.Option(min=1, help="Máximo de artículos.")] = 10,
     mode: ModeOpt = "hybrid",
+    reading: ReadingOpt = None, field: FieldOpt = None,
     as_json: JsonOpt = False,
 ) -> None:  # fmt: skip
     """Busca artículos por tema (por significado y por palabras) en metadatos, resúmenes, texto y figuras."""
     lib = Library(_home(ctx))
     index = _index(lib, mode)
-    hits = index.search(
-        query, _filters(project, study, country, region, locality, year), limit, mode
-    )
+    filters = _filters(project, study, country, region, locality, year, None, reading, field)
+    hits = index.search(query, filters, limit, mode)
     _index_warning(index, as_json)
     if as_json:
         print(json.dumps([dataclasses.asdict(h) for h in hits], ensure_ascii=False, indent=2))
@@ -1093,12 +1157,13 @@ def list_papers(
     ctx: typer.Context,
     project: ProjectOpt = None, study: StudyOpt = None, country: CountryOpt = None,
     region: RegionOpt = None, locality: LocalityOpt = None, year: YearOpt = None,
-    status: StatusOpt = None, as_json: JsonOpt = False,
+    status: StatusOpt = None, reading: ReadingOpt = None, field: FieldOpt = None,
+    as_json: JsonOpt = False,
 ) -> None:  # fmt: skip
     """Lista artículos con filtros (sin tema). Con --json, útil para contar."""
     lib = Library(_home(ctx))
     hits = open_index(lib, semantic=False).list(
-        _filters(project, study, country, region, locality, year, status)
+        _filters(project, study, country, region, locality, year, status, reading, field)
     )
     if as_json:
         print(json.dumps([dataclasses.asdict(h) for h in hits], ensure_ascii=False, indent=2))
@@ -1421,3 +1486,209 @@ def eval_search(
         console.print(
             f"[bold]{mode:9}[/] recall@1 {row['recall@1']:.2f} · recall@{k} {row[f'recall@{k}']:.2f} · MRR {row['mrr']:.2f}"
         )
+
+
+# --- phase 8 extras ----------------------------------------------------------------
+
+
+def _check_retractions(home: Path, as_json: bool) -> None:
+    from .retractions import check_updates
+
+    lib = Library(home)
+    config = load_config(home)
+    client = MetadataClient(lib.cache_dir, email=config.user.email)
+    with console.status("Consultando Crossref (retractaciones y correcciones)…"):
+        notices = check_updates(lib, client)
+    if as_json:
+        err_console.print(
+            json.dumps([dataclasses.asdict(n) for n in notices], ensure_ascii=False, default=str)
+        )
+        return
+    if not notices:
+        console.print(
+            "[green]✓[/] Ningún artículo tiene retractaciones, correcciones ni notas de Crossref."
+        )
+    for notice in notices:
+        mark = "[bold red]⚠ RETRACTADO[/]" if notice.retracted else "[yellow]![/]"
+        kinds = ", ".join(f"{u.type} ({u.date})" if u.date else u.type for u in notice.updates)
+        new = " [bold](nuevo)[/]" if notice.new else ""
+        console.print(f"{mark} [bold]{notice.citekey}[/]{new}: {escape(kinds)}")
+
+
+def _reclassify(lib: Library, keys: list[str], as_json: bool, backend_name: str | None) -> None:
+    if not keys:
+        keys = [
+            d.meta.citekey
+            for d in lib.iter_papers()
+            if not isinstance(d, InvalidDocument) and lib.fulltext_path(d.meta.citekey).is_file()
+        ]
+    machine = detect_machine_name()
+    profile = load_profile(lib.home, machine)
+    name = backend_name or (profile.process.backend if profile else "claude")
+    try:
+        backend = get_backend(name, profile, load_env(lib.home))
+    except BackendError as exc:
+        console.print(f"[red]✗[/] {escape(str(exc))}")
+        raise typer.Exit(1) from exc
+    processor = Processor(lib, load_config(lib.home), backend, machine)
+    results = []
+    for number, key in enumerate(keys, start=1):
+        if as_json:
+            results.append(processor.reclassify(key))
+            continue
+        with console.status(f"[{number}/{len(keys)}] clasificando {key}…"):
+            result = processor.reclassify(key)
+        results.append(result)
+        mark = "[green]✓[/]" if result.outcome == "processed" else "[red]✗[/]"
+        console.print(f"{mark} {key}  [dim]{escape(result.message)}[/]")
+    if as_json:
+        print(json.dumps([dataclasses.asdict(r) for r in results], ensure_ascii=False, indent=2))
+    if any(r.outcome == "error" for r in results):
+        raise typer.Exit(1)
+
+
+@app.command()
+def read(
+    ctx: typer.Context,
+    citekey: Annotated[str, typer.Argument(help="Artículo.")],
+    status: Annotated[str | None, typer.Option(help="por-leer, leyendo o leido.")] = None,
+    rating: Annotated[int | None, typer.Option(min=1, max=5, help="Calificación de 1 a 5.")] = None,
+    clear: Annotated[bool, typer.Option(help="Quitar estado y calificación.")] = False,
+) -> None:
+    """Estado de lectura y calificación de un artículo."""
+    lib = Library(_home(ctx))
+    doc = _read_paper(lib, citekey)
+    if status is not None and status not in ("por-leer", "leyendo", "leido"):
+        console.print("[red]✗[/] --status debe ser por-leer, leyendo o leido")
+        raise typer.Exit(2)
+    update = {"reading": None, "rating": None} if clear else {}
+    if status is not None:
+        update["reading"] = status
+    if rating is not None:
+        update["rating"] = rating
+    paper = doc.meta.model_copy(update=update)
+    if update:
+        lib.write_paper(paper, doc.body)
+    console.print(f"{citekey}: {paper.reading or 'sin estado'} {'★' * (paper.rating or 0)}")
+
+
+@app.command()
+def attach(
+    ctx: typer.Context,
+    citekey: Annotated[str, typer.Argument(help="Artículo.")],
+    pdf: Annotated[Path, typer.Argument(help="PDF del material suplementario.")],
+    label: Annotated[
+        str | None, typer.Option(help="Descripción, p. ej. 'Datos de monitoreo'.")
+    ] = None,
+) -> None:
+    """Agrega material suplementario a un artículo: su texto se vuelve buscable."""
+    from .ingest.extract import ExtractionError
+    from .supplements import SupplementError
+    from .supplements import attach as attach_supplement
+
+    lib = Library(_home(ctx))
+    if not pdf.expanduser().is_file():
+        console.print(f"[red]✗[/] no existe {escape(str(pdf))}")
+        raise typer.Exit(2)
+    try:
+        supplement = attach_supplement(
+            lib, load_config(lib.home), citekey, pdf.expanduser().resolve(), label
+        )
+    except (SupplementError, ExtractionError) as exc:
+        console.print(f"[red]✗[/] {escape(str(exc))}")
+        raise typer.Exit(1) from exc
+    console.print(
+        f"[green]✓[/] {citekey}: suplemento {supplement.id} ({supplement.pages} pp.) → "
+        f"{lib.supplement_pdf(citekey, supplement.id).relative_to(lib.home)}"
+    )
+
+
+@app.command()
+def refs(
+    ctx: typer.Context,
+    citekey: Annotated[str | None, typer.Argument(help="Artículo (si no, el resumen de la biblioteca).")] = None,
+    missing: Annotated[bool, typer.Option(help="Obras citadas por varios de tus artículos que no tienes.")] = False,
+    min_count: Annotated[int, typer.Option("--min", min=1, help="Mínimo de artículos que la citan.")] = 2,
+    limit: Annotated[int, typer.Option(min=1, help="Máximo de resultados.")] = 20,
+    html: Annotated[Path | None, typer.Option(help="Guardar el grafo como página interactiva (.html).")] = None,
+    as_json: JsonOpt = False,
+) -> None:  # fmt: skip
+    """Citas dentro de la biblioteca (según Crossref): a quién cita un artículo y quién lo cita."""
+    from .citations import build_graph, graph_html, missing_works
+
+    lib = Library(_home(ctx))
+    config = load_config(lib.home)
+    if citekey:
+        _read_paper(lib, citekey)
+    with console.status("Leyendo las referencias de Crossref…"):
+        graph = build_graph(lib, MetadataClient(lib.cache_dir, email=config.user.email))
+    if html is not None:
+        titles = {
+            d.meta.citekey: d.meta.title
+            for d in lib.iter_papers()
+            if not isinstance(d, InvalidDocument)
+        }
+        out = html.expanduser()
+        out.write_text(graph_html(graph, titles, min_count), encoding="utf-8")
+        console.print(
+            f"[green]✓[/] Grafo guardado en {escape(str(out))}. Ábrelo con: open {escape(str(out))}"
+        )
+        return
+    if missing:
+        works = missing_works(graph, min_count, limit)
+        if as_json:
+            print(json.dumps([dataclasses.asdict(w) for w in works], ensure_ascii=False, indent=2))
+            return
+        if not works:
+            console.print(
+                f"Ninguna obra fuera de la biblioteca la citan {min_count} o más de tus artículos."
+            )
+        for work in works:
+            desc = " · ".join(x for x in (work.author, work.year, work.container) if x)
+            console.print(
+                f"[bold]{len(work.cited_by)}×[/] {escape(work.title or work.doi)}  [dim]{escape(desc)}[/]"
+            )
+            console.print(f"    [dim]DOI {work.doi} · citado por {', '.join(work.cited_by)}[/]")
+        console.print("\n[dim]Para registrarlas: sb ingest DOI (quedan esperando PDF).[/]")
+        return
+    if citekey:
+        data = {
+            "citekey": citekey,
+            "cites": graph.cites.get(citekey, []),
+            "cited_by": graph.cited_by.get(citekey, []),
+            "references": graph.references.get(citekey),
+        }
+        if as_json:
+            print(json.dumps(data, ensure_ascii=False, indent=2))
+            return
+        if data["references"] is None:
+            console.print(
+                "[yellow]![/] Crossref no publica las referencias de este artículo (o no tiene DOI)."
+            )
+        else:
+            console.print(f"{citekey} tiene {data['references']} referencias en Crossref.")
+        console.print(f"Cita a (en tu biblioteca): {', '.join(data['cites']) or 'ninguno'}")
+        console.print(f"Lo citan (en tu biblioteca): {', '.join(data['cited_by']) or 'ninguno'}")
+        return
+    rows = sorted(graph.cited_by.items(), key=lambda kv: -len(kv[1]))
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "cited_by": graph.cited_by,
+                    "cites": graph.cites,
+                    "without_data": graph.without_data,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    console.print("Artículos más citados dentro de tu biblioteca:")
+    for key, citing in rows[:limit]:
+        if citing:
+            console.print(f"  [bold]{len(citing)}[/] {key}  [dim]← {', '.join(citing)}[/]")
+    if not any(citing for _, citing in rows):
+        console.print("  (ninguno se cita entre sí todavía)")
+    if graph.without_data:
+        console.print(f"[dim]Sin referencias en Crossref: {', '.join(graph.without_data)}[/]")

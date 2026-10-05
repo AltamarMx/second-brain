@@ -21,7 +21,13 @@ from pylatexenc.latex2text import LatexNodes2Text
 from .citekey import make_citekey
 from .ingest.dedupe import LibraryIndex
 from .ingest.doi import DOI_RE, normalize_doi
-from .ingest.metadata import MetadataClient, NetworkError, crossref_fields, datacite_fields
+from .ingest.metadata import (
+    MetadataClient,
+    NetworkError,
+    crossref_fields,
+    datacite_fields,
+    flags_from_updates,
+)
 from .library import Library
 from .models import ALIAS_PATTERN, CITEKEY_PATTERN, Paper, Provenance
 from .textutil import normalize_for_match
@@ -249,7 +255,8 @@ def import_bib(
                     "aliases": alias,
                     "projects": {project: {"added": today}} if project else {},
                     "status": "awaiting_pdf",
-                    "flags": ["possible_duplicate"] if similar else [],
+                    "flags": (["possible_duplicate"] if similar else [])
+                    + flags_from_updates(fields.get("updates", [])),
                     "added": today,
                     "provenance": Provenance(metadata_source=source),
                 }

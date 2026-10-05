@@ -2,7 +2,7 @@
 
 Este documento es el **contrato** entre el código y los datos de una biblioteca. La implementación vive en `src/second_brain/models.py` (archivos de `library/`), `config.py` (`config.toml`) y `machines.py` (`machines/*.toml`). Todo cambio en esos módulos actualiza este documento en el mismo commit.
 
-Versión del esquema: **2** (la 2 agregó `aliases` a los artículos; `sb migrate` actualiza los archivos de la versión 1, que se siguen leyendo).
+Versión del esquema: **3** (la 2 agregó `aliases`; la 3, `reading`, `rating`, `supplements`, `updates` y `classification.extra`). Los archivos de versiones anteriores se siguen leyendo; `sb migrate` los actualiza.
 
 ## Reglas generales
 
@@ -55,10 +55,14 @@ Versión del esquema: **2** (la 2 agregó `aliases` a los artículos; `sb migrat
 | `classification` | mapa | Ver abajo |
 | `projects` | mapa `slug → {added, note}` | Cada slug debe existir en `library/projects/` |
 | `pdf` | mapa o null | `sha256`, `pages`, `size_bytes`, `source` (`inbox`, `openaccess`, `institutional`), `original_filename` |
+| `supplements` | lista | Material suplementario: `id` (`s1`, `s2`…), `label`, `sha256`, `pages`, `size_bytes`, `original_filename`. Texto en `library/supplements/KEY--sN.md`, PDF en `pdfs/KEY--sN.pdf` |
 | `figures` | entero | Número de figuras descritas |
 | `status` | texto | `awaiting_pdf`, `needs_review`, `needs_processing`, `processed` |
 | `flags` | lista | `doi_uncertain`, `metadata_mismatch`, `ocr`, `possible_duplicate`, `pdf_version_mismatch`, `retracted` |
 | `added` | fecha | Obligatorio |
+| `reading` | texto o null | `por-leer`, `leyendo`, `leido` |
+| `rating` | entero o null | 1 a 5 |
+| `updates` | lista | Notas de Crossref sobre la obra: `type` (`retraction`, `correction`, `expression_of_concern`…), `doi`, `date`, `source` |
 | `provenance` | mapa | `metadata_source`, `extractor`, `fulltext_sha256`, `process` y `figures` (procedencia del LLM: `backend`, `model`, `prompt`, `machine`, `date`, `sha256`) |
 
 El cuerpo contiene el resumen, con las secciones *En una frase*, *Problema y objetivo*, *Datos y métodos*, *Resultados principales*, *Conclusiones* y *Limitaciones (según los autores)*.
@@ -69,6 +73,7 @@ El cuerpo contiene el resumen, con las secciones *En una frase*, *Problema y obj
 |---|---|---|
 | `study_type` | texto o null | Debe estar en `[vocab].study_type` de `config.toml` |
 | `locations` | lista | Cada sitio: `country` (ISO 3166-1 alfa-2, mayúsculas), `region` (estado o provincia), `locality` (ciudad, municipio o sitio), `page`. Todos opcionales: se llena lo que diga el artículo |
+| `extra` | mapa | Campos definidos en `config.toml` → `[classification.<nombre>]`: un valor, una lista (`multiple = true`) o null |
 | `reviewed` | booleano | `true` cuando el usuario confirmó la clasificación |
 
 ## `library/projects/{slug}.md`
@@ -111,6 +116,7 @@ En el artículo, `figures` cuenta las figuras descritas y `provenance.figures` r
 | `[extract]` | `ocr_languages` (códigos de Tesseract; solo se usan los instalados) |
 | `[figures]` | `describe` |
 | `[access]` | `institution`, `ip_ranges` (CIDR), `vpn_hint`, `max_downloads_per_run`, `seconds_between_downloads` |
+| `[classification.<nombre>]` | `label`, `description`, `values` (vacío = texto libre), `multiple` |
 | `[checks]` | `max_file_mb` |
 
 ## `machines/{nombre}.toml`

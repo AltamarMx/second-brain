@@ -11,7 +11,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = 2  # 2: Paper.aliases
+SCHEMA_VERSION = (
+    3  # 2: Paper.aliases; 3: reading, rating, supplements, updates, classification.extra
+)
 
 CITEKEY_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 SLUG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
@@ -24,7 +26,9 @@ PaperFlag = Literal[
     "possible_duplicate",
     "pdf_version_mismatch",
     "retracted",
+    "expression_of_concern",
 ]
+ReadingStatus = Literal["por-leer", "leyendo", "leido"]
 PdfSource = Literal["inbox", "openaccess", "institutional"]
 ALIAS_PATTERN = r"^[^\s,{}%#\\]+$"
 ProjectStatus = Literal["active", "paused", "archived"]
@@ -58,6 +62,9 @@ class Location(Model):
 class Classification(Model):
     study_type: str | None = None
     locations: list[Location] = []
+    extra: dict[
+        str, str | list[str] | None
+    ] = {}  # fields defined in config.toml [classification.*]
     reviewed: bool = False
 
 
@@ -74,6 +81,26 @@ class PdfInfo(Model):
     original_filename: str | None = None
 
 
+class Supplement(Model):
+    """Supplementary material: its PDF is ``pdfs/{citekey}--{id}.pdf``, its text ``library/supplements/``."""
+
+    id: str = Field(pattern=r"^s[0-9]+$")
+    label: str | None = None
+    sha256: str
+    pages: int
+    size_bytes: int
+    original_filename: str | None = None
+
+
+class Update(Model):
+    """A notice about this work reported by Crossref (retraction, correction, …)."""
+
+    type: str
+    doi: str | None = None
+    date: dt.date | None = None
+    source: str | None = None
+
+
 class LlmProvenance(Model):
     backend: str
     model: str
@@ -88,6 +115,7 @@ class Provenance(Model):
     extractor: str | None = None
     fulltext_sha256: str | None = None
     process: LlmProvenance | None = None
+    classification: LlmProvenance | None = None  # sb process --reclassify
     figures: LlmProvenance | None = None
 
 
@@ -116,10 +144,14 @@ class Paper(Model):
     classification: Classification = Classification()
     projects: dict[str, Membership] = {}
     pdf: PdfInfo | None = None
+    supplements: list[Supplement] = []
     figures: int = 0
     status: PaperStatus = "needs_processing"
     flags: list[PaperFlag] = []
     added: dt.date
+    reading: ReadingStatus | None = None
+    rating: int | None = Field(default=None, ge=1, le=5)
+    updates: list[Update] = []
     provenance: Provenance = Provenance()
 
 
@@ -138,6 +170,19 @@ class FullText(Model):
     """Frontmatter of ``library/fulltext/{citekey}.md``; the body is the extracted text."""
 
     citekey: str = Field(pattern=CITEKEY_PATTERN)
+    source_pdf_sha256: str
+    extractor: str
+    extracted: dt.date
+    pages: int
+    ocr: bool = False
+
+
+class SupplementText(Model):
+    """Frontmatter of ``library/supplements/{citekey}--{id}.md``; the body is the extracted text."""
+
+    citekey: str = Field(pattern=CITEKEY_PATTERN)
+    id: str = Field(pattern=r"^s[0-9]+$")
+    label: str | None = None
     source_pdf_sha256: str
     extractor: str
     extracted: dt.date

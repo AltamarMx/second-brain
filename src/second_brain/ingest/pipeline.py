@@ -38,6 +38,7 @@ from .metadata import (
     crossref_fields,
     crossref_relations,
     datacite_fields,
+    flags_from_updates,
 )
 
 Outcome = Literal[
@@ -210,6 +211,24 @@ class Ingestor:
         existing = self.index.find_by_sha(sha)
         if existing:
             return self._known_file(path, existing, result)
+        if sha in self.index.by_supplement_sha:
+            citekey, supplement_id = self.index.by_supplement_sha[sha]
+            result.citekey = citekey
+            local = self.lib.supplement_pdf(citekey, supplement_id)
+            if local.exists():
+                result.outcome, result.message = (
+                    "duplicate",
+                    f"es el suplemento {supplement_id} de {citekey}",
+                )
+                self._set_aside(path, DUPLICATES_DIR)
+            else:
+                result.outcome, result.message = (
+                    "relinked",
+                    f"suplemento {supplement_id} de {citekey} re-vinculado",
+                )
+                if not self.options.dry_run:
+                    _move_verified(path, local, sha)
+            return result
 
         extraction = extract(path, ocr_languages=self.config.extract.ocr_languages)
         resolved = self._resolve(extraction, expected_doi)
@@ -225,7 +244,7 @@ class Ingestor:
             # a record without PDF (from sb import bib or a DOI) with the same title: attach to it
             return self._known_doi(path, similar, sha, extraction, result, source)
 
-        flags = list(resolved.flags)
+        flags = list(resolved.flags) + flags_from_updates(resolved.fields.get("updates", []))
         if extraction.ocr:
             flags.append("ocr")
         if similar:
@@ -545,7 +564,8 @@ class Ingestor:
                 "citekey": citekey,
                 "projects": self._membership(),
                 "status": "awaiting_pdf",
-                "flags": ["possible_duplicate"] if similar else [],
+                "flags": (["possible_duplicate"] if similar else [])
+                + flags_from_updates(fields.get("updates", [])),
                 "added": self.options.today,
                 "provenance": Provenance(metadata_source=source),
             }

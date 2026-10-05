@@ -23,7 +23,7 @@ from .models import Paper
 from .processing import one_sentence
 from .reading import KNOWN_RE, NUMBERED_RE, split_pages
 
-INDEX_VERSION = "2"  # 2: vectors
+INDEX_VERSION = "3"  # 2: vectors; 3: reading, rating, extra fields, supplements
 CHUNK_WORDS = 350
 TOKENIZER = "porter unicode61 remove_diacritics 2"
 REFERENCES_RE = re.compile(r"^(references|referencias|bibliograf\w*)$", re.IGNORECASE)
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS files (citekey TEXT PRIMARY KEY, signature TEXT);
 CREATE TABLE IF NOT EXISTS papers (
     citekey TEXT PRIMARY KEY, title TEXT, year INTEGER, status TEXT, study_type TEXT,
     container TEXT, authors TEXT, countries TEXT, regions TEXT, localities TEXT, projects TEXT,
-    one_sentence TEXT
+    one_sentence TEXT, reading TEXT, rating INTEGER, extra TEXT
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS papers_fts USING fts5(
     citekey UNINDEXED, title, authors, abstract, summary, keywords, places, tokenize = '{TOKENIZER}'
@@ -68,6 +68,8 @@ class Filters:
     year_from: int | None = None
     year_to: int | None = None
     status: str | None = None
+    reading: str | None = None
+    extra: tuple[str, ...] = ()  # "field=value" pairs from config.toml [classification.*]
 
     @staticmethod
     def parse_years(spec: str | None) -> tuple[int | None, int | None]:
@@ -312,7 +314,7 @@ class SearchIndex:
             " ".join(filter(None, (loc.country, loc.region, loc.locality))) for loc in locations
         )
         db.execute(
-            "INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 paper.citekey, paper.title, paper.year, paper.status,
                 paper.classification.study_type, paper.container_title,
@@ -321,7 +323,7 @@ class SearchIndex:
                 _joined(loc.region for loc in locations),
                 _joined(loc.locality for loc in locations),
                 _joined(paper.projects),
-                one_sentence(summary),
+                one_sentence(summary), paper.reading, paper.rating, _extra_tokens(paper),
             ),
         )  # fmt: skip
         db.execute(
@@ -343,6 +345,20 @@ class SearchIndex:
             ):
                 page = int(match.group(2))
                 rows.append((page, page, match.group(1), "figure", match.group(3).strip()))
+        for supplement in paper.supplements:
+            path = self.lib.supplement_path(paper.citekey, supplement.id)
+            if not path.is_file():
+                continue
+            label = f"Suplemento {supplement.id}" + (
+                f": {supplement.label}" if supplement.label else ""
+            )
+            for start, end, section, kind, text in chunk_fulltext(
+                self.lib.read_supplement(paper.citekey, supplement.id).body, label
+            ):
+                if kind != "refs":
+                    rows.append(
+                        (start, end, f"{label} · {section}".strip(" ·"), "supplement", text)
+                    )
         for page_start, page_end, section, kind, text in rows:
             cursor = db.execute(
                 "INSERT INTO chunks (citekey, page_start, page_end, section, kind, text) VALUES (?,?,?,?,?,?)",
@@ -360,7 +376,14 @@ class SearchIndex:
         if filters.project:
             clauses.append(f"(' ' || {alias}.projects || ' ') LIKE ?")
             params.append(f"% {filters.project} %")
-        for column, value in (("study_type", filters.study), ("status", filters.status)):
+        for pair in filters.extra:
+            clauses.append(f"(' ' || {alias}.extra || ' ') LIKE ?")
+            params.append(f"% {pair.strip().lower()} %")
+        for column, value in (
+            ("study_type", filters.study),
+            ("status", filters.status),
+            ("reading", filters.reading),
+        ):
             if value:
                 clauses.append(f"{alias}.{column} = ?")
                 params.append(value)
@@ -560,6 +583,15 @@ class SearchIndex:
         for hit in hits:
             hit.passages = self.passages(query, filters, paper=hit.citekey, limit=2, mode=mode)
         return hits
+
+
+def _extra_tokens(paper: Paper) -> str:
+    """``clima=aw edificacion=vivienda edificacion=oficinas`` (lowercase), for LIKE filters."""
+    tokens = []
+    for name, value in paper.classification.extra.items():
+        for item in value if isinstance(value, list) else [value] if value else []:
+            tokens.append(f"{name}={item}".lower().replace(" ", "_"))
+    return " ".join(tokens)
 
 
 def _joined(values) -> str:

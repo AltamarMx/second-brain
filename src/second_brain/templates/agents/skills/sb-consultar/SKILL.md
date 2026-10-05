@@ -23,6 +23,13 @@ Para conteos o listados sin tema: `uv run sb list --json` con los filtros, o `uv
 4. Para preguntas sobre figuras, lee `library/figures/KEY.md`.
 5. Responde con citas `[KEY, p. N]`. Si no aparece: "El artículo no lo menciona (busqué: …)".
 
+## Lectura, citas y retractaciones
+
+- Estado de lectura: `uv run sb read KEY --status leido --rating 4`; filtrar con `--reading por-leer` en `sb list` o `sb search`.
+- Citas dentro de la biblioteca: `uv run sb refs KEY --json` (a quién cita y quién lo cita); obras que faltan: `uv run sb refs --missing --json`.
+- Campos de clasificación extra (si `config.toml` los define): filtra con `--field nombre=valor`.
+- Suplementos: aparecen en `sb passages` como `kind: supplement`; texto con `uv run sb text KEY --supplement s1`.
+
 ## Comparar varios artículos
 
 Obtén pasajes de cada uno y arma una tabla con una cita en cada celda. No rellenes celdas: "no reportado".

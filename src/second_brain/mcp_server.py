@@ -165,6 +165,35 @@ def build_server(home: Path | None = None) -> MCPServer:
         removed, absent = proj.remove_papers(lib, slug, citekeys)
         return f"quitados: {removed}; no estaban: {absent}"
 
+    @server.tool()
+    def set_reading(citekey: str, status: str | None = None, rating: int | None = None) -> str:
+        """Estado de lectura (por-leer, leyendo, leido) y calificación 1-5 de un artículo."""
+        doc = lib.read_paper(citekey)
+        update = {k: v for k, v in (("reading", status), ("rating", rating)) if v is not None}
+        lib.write_paper(doc.meta.model_copy(update=update), doc.body)
+        return f"{citekey}: {update}"
+
+    @server.tool()
+    def citations(
+        citekey: str | None = None, missing: bool = False, min_count: int = 2
+    ) -> dict[str, Any]:
+        """Citas dentro de la biblioteca según Crossref. Con citekey: a quién cita y quién lo cita.
+        Con missing=true: obras que citan varios de tus artículos y no están en la biblioteca."""
+        from .citations import build_graph, missing_works
+        from .ingest.metadata import MetadataClient
+
+        graph = build_graph(
+            lib, MetadataClient(lib.cache_dir, email=load_config(lib.home).user.email)
+        )
+        if missing:
+            return {"missing": [dataclasses.asdict(w) for w in missing_works(graph, min_count)]}
+        if citekey:
+            return {
+                "cites": graph.cites.get(citekey, []),
+                "cited_by": graph.cited_by.get(citekey, []),
+            }
+        return {"cited_by": {k: v for k, v in graph.cited_by.items() if v}}
+
     return server
 
 

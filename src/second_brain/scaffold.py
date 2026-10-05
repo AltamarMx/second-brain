@@ -17,7 +17,7 @@ from string import Template
 from .machines import Agent, Backend, profile_path
 
 HOOKS_DIRNAME = ".githooks"
-LIBRARY_SUBDIRS = ("papers", "fulltext", "figures", "notes", "projects")
+LIBRARY_SUBDIRS = ("papers", "fulltext", "figures", "supplements", "notes", "projects")
 
 
 @dataclass

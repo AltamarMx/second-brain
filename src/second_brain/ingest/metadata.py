@@ -64,11 +64,11 @@ class MetadataClient:
         )
         self.retries = retries
 
-    def _get(self, url: str) -> dict[str, Any] | None:
-        """JSON body for 200, ``None`` for 404; both are cached."""
+    def _get(self, url: str, refresh: bool = False) -> dict[str, Any] | None:
+        """JSON body for 200, ``None`` for 404; both are cached (``refresh`` asks again)."""
         key = hashlib.sha256(url.encode()).hexdigest()
         cached = self.cache_dir / f"{key}.json"
-        if cached.is_file():
+        if cached.is_file() and not refresh:
             return json.loads(cached.read_text(encoding="utf-8"))["body"]
         for attempt in range(self.retries + 1):
             try:
@@ -91,8 +91,8 @@ class MetadataClient:
             time.sleep(2**attempt)
         return None
 
-    def crossref_work(self, doi: str) -> dict[str, Any] | None:
-        body = self._get(f"{CROSSREF}/works/{urllib.parse.quote(doi, safe='/')}")
+    def crossref_work(self, doi: str, refresh: bool = False) -> dict[str, Any] | None:
+        body = self._get(f"{CROSSREF}/works/{urllib.parse.quote(doi, safe='/')}", refresh=refresh)
         return body["message"] if body else None
 
     def crossref_search(self, query: str, rows: int = 5) -> list[dict[str, Any]]:
@@ -158,7 +158,43 @@ def crossref_fields(message: dict[str, Any]) -> dict[str, Any]:
         "language": message.get("language"),
         "license": licenses[0].get("URL") if licenses else None,
         "abstract": _abstract(message.get("abstract")),
+        "updates": crossref_updates(message),
     }
+
+
+RETRACTING = {"retraction", "withdrawal", "removal", "partial_retraction"}
+
+
+def crossref_updates(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Notices about this work (retraction, correction, expression of concern…), oldest first."""
+    updates = []
+    for item in message.get("updated-by") or []:
+        parts = (item.get("updated") or {}).get("date-parts") or [[None]]
+        date = None
+        if parts[0] and parts[0][0]:
+            year, month, day = (list(parts[0]) + [1, 1])[:3]
+            date = f"{year:04d}-{month:02d}-{day:02d}"
+        updates.append(
+            {
+                "type": item.get("type", "update"),
+                "doi": item.get("DOI"),
+                "date": date,
+                "source": item.get("source"),
+            }
+        )
+    return sorted(updates, key=lambda u: u["date"] or "")
+
+
+def flags_from_updates(updates: list[Any]) -> list[str]:
+    types = {
+        (u["type"] if isinstance(u, dict) else u.type).lower().replace("-", "_") for u in updates
+    }
+    flags = []
+    if types & RETRACTING:
+        flags.append("retracted")
+    if "expression_of_concern" in types:
+        flags.append("expression_of_concern")
+    return flags
 
 
 def crossref_relations(message: dict[str, Any]) -> list[str]:

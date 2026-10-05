@@ -55,6 +55,15 @@ class AccessSection(Section):
     seconds_between_downloads: float = Field(default=10, ge=0)
 
 
+class ExtraField(Section):
+    """An extra classification field filled by the LLM (``[classification.<name>]``)."""
+
+    label: str
+    description: str
+    values: list[str] = []  # allowed values; empty = free text
+    multiple: bool = False  # a list of values instead of one
+
+
 class ChecksSection(Section):
     max_file_mb: float = Field(default=10, gt=0)
 
@@ -66,6 +75,7 @@ class LibraryConfig(Section):
     extract: ExtractSection = ExtractSection()
     figures: FiguresSection = FiguresSection()
     access: AccessSection = AccessSection()
+    classification: dict[str, ExtraField] = {}
     checks: ChecksSection = ChecksSection()
 
 

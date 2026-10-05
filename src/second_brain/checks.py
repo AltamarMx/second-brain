@@ -167,6 +167,29 @@ def _check_papers(
                 )
             else:
                 dois[key] = doc.path
+        for name, value in paper.classification.extra.items():
+            spec = config.classification.get(name)
+            if spec is None:
+                report.add(
+                    "warning",
+                    doc.path,
+                    f"campo de clasificación '{name}' no está en config.toml",
+                    lib.home,
+                )
+                continue
+            for item in value if isinstance(value, list) else [value] if value else []:
+                if spec.values and item not in spec.values:
+                    report.add(
+                        "error",
+                        doc.path,
+                        f"{name} = '{item}' no está en los valores permitidos",
+                        lib.home,
+                    )
+        for supplement in paper.supplements:
+            if not lib.supplement_path(paper.citekey, supplement.id).is_file():
+                report.add(
+                    "error", doc.path, f"falta el texto del suplemento {supplement.id}", lib.home
+                )
         study = paper.classification.study_type
         if study is not None and study not in config.vocab.study_type:
             report.add(
