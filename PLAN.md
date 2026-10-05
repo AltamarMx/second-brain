@@ -1071,6 +1071,7 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 8: Extras (según necesidad)
 
+- [ ] **Pendiente (2026-10-04): retomar la ingesta por DOI con descarga automática.** Funciona, pero casi todas las editoriales bloquean robots (ver fase 2). Por ahora el usuario descarga los PDFs y los suelta en `inbox/`. Al retomarlo: configurar `[user].email` (Unpaywall) y evaluar las APIs oficiales de las editoriales.
 - [ ] Más campos de clasificación (clima Köppen, tipo de edificación, escala) y `sb process --reclassify`.
 - [ ] Grafo de citas dentro de la biblioteca: "¿qué artículos muy citados por mi biblioteca me faltan?".
 - [ ] Alerta de retractaciones en `sb check --retractions` (Crossref publica los datos de Retraction Watch).
