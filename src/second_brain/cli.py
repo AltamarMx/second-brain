@@ -9,6 +9,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
@@ -66,7 +67,7 @@ def _home(ctx: typer.Context) -> Path:
     try:
         return find_home(ctx.obj)
     except HomeNotFoundError as exc:
-        console.print(f"[red]✗[/] {exc}")
+        console.print(f"[red]✗[/] {escape(str(exc))}")
         raise typer.Exit(2) from exc
 
 
@@ -149,7 +150,7 @@ def doctor(ctx: typer.Context) -> None:
     findings = run_doctor(ctx.obj)
     table = Table(show_header=False, box=None, pad_edge=False)
     for finding in findings:
-        table.add_row(STATE_STYLE[finding.state], finding.name, finding.detail)
+        table.add_row(STATE_STYLE[finding.state], finding.name, escape(finding.detail))
     console.print(table)
     if any(f.state == "fail" for f in findings):
         raise typer.Exit(1)
@@ -182,7 +183,7 @@ def check(
     else:
         for issue in report.issues:
             mark = "[red]✗[/]" if issue.level == "error" else "[yellow]![/]"
-            console.print(f"{mark} {issue.path}: {issue.message}")
+            console.print(f"{mark} {escape(issue.path)}: {escape(issue.message)}")
         summary = f"{report.papers} artículos, {report.projects} proyectos"
         if report.ok:
             console.print(f"[green]✓[/] Biblioteca válida ({summary}).")

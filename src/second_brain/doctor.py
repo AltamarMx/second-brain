@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from .scaffold import hooks_installed
 
 State = Literal["ok", "warn", "fail", "info"]
 OLLAMA_URL = "http://localhost:11434/api/version"
+VERSION_RE = re.compile(r"\d+\.\d+(?:\.\d+)?")
 
 
 @dataclass(frozen=True)
@@ -34,8 +36,8 @@ def _tool_version(command: str, *args: str) -> str | None:
         result = subprocess.run([command, *args], capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         return "instalado"
-    output = (result.stdout or result.stderr).strip().splitlines()
-    return output[-1] if output else "instalado"
+    match = VERSION_RE.search(result.stdout + result.stderr)
+    return match.group(0) if match else "instalado"
 
 
 def _ollama_running() -> bool:
