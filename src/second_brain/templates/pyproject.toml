@@ -1,0 +1,9 @@
+[project]
+name = "$name"
+version = "0.1.0"
+description = "Datos de una biblioteca de second-brain"
+requires-python = ">=3.13"
+dependencies = []
+
+[tool.uv]
+package = false

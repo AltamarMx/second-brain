@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# GitHub colapsa los diffs del texto completo
+library/fulltext/** linguist-generated=true

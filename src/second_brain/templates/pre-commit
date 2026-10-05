@@ -1,0 +1,3 @@
+#!/bin/sh
+# Instalado por `sb init` (git config core.hooksPath .githooks).
+exec uv run --quiet sb check --fast

@@ -1,0 +1,27 @@
+# Configuración compartida de la biblioteca (en git). Sin secretos: esos van en .env.
+# Referencia completa: docs/formato-datos.md del repo second-brain.
+
+[user]
+email = $email                          # "polite pool" de Crossref; lo exige Unpaywall
+
+[library]
+summary_language = "es"
+process_prompt = "process.v1"
+citekey_format = "{auth}{year}{word}"
+
+[vocab]                                 # valores permitidos; puedes añadir más
+study_type = ["experimental", "numerico", "ambos", "teorico", "revision", "otro"]
+project_kind = ["tesis", "articulo", "proyecto", "curso", "otro"]
+
+[figures]
+describe = true                         # describir las figuras al ingerir
+
+[access]                                # acceso institucional a editoriales
+institution = $institution
+ip_ranges = $ip_ranges                  # rangos de IP de la red institucional
+vpn_hint = $vpn_hint                    # se muestra cuando una descarga pide autenticación
+max_downloads_per_run = 30
+seconds_between_downloads = 10
+
+[checks]
+max_file_mb = 10

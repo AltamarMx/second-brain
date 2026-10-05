@@ -1,0 +1,15 @@
+# Hooks locales: usan el ruff del entorno del proyecto (uv run), nada global.
+# Activar una vez por clon: uv run pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]

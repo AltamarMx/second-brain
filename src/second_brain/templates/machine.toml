@@ -1,0 +1,19 @@
+# Perfil de la máquina "$name" (en git). Lo usa sb cuando SB_MACHINE o el nombre
+# de la computadora es "$name".
+
+[process]                               # resumen, clasificación y figuras al ingerir
+backend = "$backend"                    # claude | ollama | anthropic | none
+
+[llm]                                   # consultas con modelo local: sb ask, sb chat opencode
+provider = "ollama"
+# model = "NOMBRE-DEL-MODELO"
+num_ctx = 32768
+
+[chat]
+agent = "$agent"                        # agente que abre `sb chat` sin argumentos: claude | opencode
+
+[embeddings]
+# model = "NOMBRE-DEL-MODELO-DE-EMBEDDINGS"
+
+[bib_outputs]                           # dónde escribe `sb bib sync` en esta máquina
+# tesis-doctoral = "~/Documents/tesis/refs.bib"

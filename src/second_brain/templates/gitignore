@@ -1,0 +1,11 @@
+# --- Local: las carpetas existen en git (.gitkeep), su contenido no ---
+inbox/*
+!inbox/.gitkeep
+pdfs/*
+!pdfs/.gitkeep
+# --- Derivados (se reconstruyen) ---
+.cache/
+logs/
+.venv/
+# --- Secretos ---
+.env
