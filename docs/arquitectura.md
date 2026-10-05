@@ -24,6 +24,8 @@ Para quien modifique el código. El porqué de cada decisión está en `PLAN.md`
 | `ingest/doi.py` | Encontrar y normalizar DOIs e IDs de arXiv |
 | `ingest/metadata.py` | Crossref y DataCite, con caché en `.cache/http/` |
 | `ingest/dedupe.py` | Índice en memoria por hash, DOI y título |
+| `fetch/download.py` | Descarga de PDFs: acceso abierto, acceso institucional, pausas y límites, clasificación de fallos |
+| `fetch/network.py` | IP pública y rangos institucionales |
 | `citekey.py` | Generación de citekeys |
 | `reading.py` | Páginas y secciones de un texto completo |
 | `textutil.py` | Normalización de texto (ASCII, etiquetas HTML, comparación difusa) |

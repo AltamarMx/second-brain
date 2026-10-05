@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import subprocess
+import sys
+import webbrowser
 from pathlib import Path
 from typing import Annotated
 
@@ -16,10 +19,11 @@ from . import __version__
 from .checks import run_checks
 from .config import HomeNotFoundError, find_home, load_config
 from .doctor import library_status, run_doctor
-from .ingest.doi import DOI_RE
+from .fetch.download import Fetcher
+from .ingest.doi import DOI_RE, normalize_doi
 from .ingest.metadata import MetadataClient
 from .ingest.pipeline import IngestError, IngestOptions, Ingestor, IngestResult, LockedError
-from .library import Library
+from .library import InvalidDocument, Library
 from .machines import Agent, Backend, detect_machine_name, load_profile, profile_path
 from .reading import select_pages, select_section
 from .scaffold import ScaffoldReport, init_library, init_machine
@@ -35,6 +39,8 @@ machine_app = typer.Typer(
     help="Perfiles por máquina (machines/{nombre}.toml).", no_args_is_help=True
 )
 app.add_typer(machine_app, name="machine")
+pdf_app = typer.Typer(help="PDFs: faltantes, descarga y apertura.", no_args_is_help=True)
+app.add_typer(pdf_app, name="pdf")
 
 console = Console()
 STATE_STYLE = {
@@ -225,6 +231,7 @@ OUTCOME_LABEL = {
     "review": ("[yellow]?[/]", "por revisar"),
     "attached": ("[green]+[/]", "PDF añadido"),
     "relinked": ("[blue]↺[/]", "re-vinculados"),
+    "awaiting": ("[yellow]…[/]", "esperando PDF"),
     "duplicate": ("[dim]=[/]", "duplicados"),
     "offline": ("[yellow]![/]", "sin conexión"),
     "error": ("[red]✗[/]", "errores"),
@@ -244,54 +251,99 @@ def _print_ingest(results: list[IngestResult], dry_run: bool) -> None:
     console.print(f"\n{prefix}{summary or 'nada que ingerir'}")
 
 
-@app.command()
-def ingest(
-    ctx: typer.Context,
-    items: Annotated[
-        list[Path] | None, typer.Argument(help="PDFs a ingerir (por defecto, todos los de inbox/).")
-    ] = None,
-    doi: Annotated[str | None, typer.Option(help="Forzar el DOI (solo con un PDF).")] = None,
-    project: Annotated[
-        str | None, typer.Option(help="Asignar lo ingerido a un proyecto existente.")
-    ] = None,
-    dry_run: Annotated[
-        bool, typer.Option(help="Mostrar qué pasaría sin escribir ni mover nada.")
-    ] = False,
-    limit: Annotated[int | None, typer.Option(min=1, help="Procesar como máximo N PDFs.")] = None,
-    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
-) -> None:
-    """Ingiere PDFs: DOI, metadatos, duplicados, texto completo y movimiento a pdfs/."""
-    home = _home(ctx)
-    lib = Library(home)
-    config = load_config(home)
-    paths = [p.expanduser().resolve() for p in items] if items else lib.inbox_pdfs()
-    for path in paths:
-        if not path.is_file():
-            hint = (
-                " (la ingesta por DOI llega en la fase 2)"
-                if DOI_RE.fullmatch(str(path.name))
-                else ""
-            )
-            console.print(f"[red]✗[/] no existe el archivo {escape(str(path))}{hint}")
-            raise typer.Exit(2)
-    paths = paths[:limit] if limit else paths
+def _confirm_vpn(hint: str) -> bool:
+    console.print(f"[yellow]![/] No estás en la red institucional. {escape(hint)}.")
+    answer = input("  Presiona Enter para reintentar, o escribe s para saltar: ")
+    return answer.strip().lower() != "s"
+
+
+def _ingestor(lib: Library, options: IngestOptions, interactive: bool) -> Ingestor:
+    config = load_config(lib.home)
     client = MetadataClient(lib.cache_dir, email=config.user.email)
-    options = IngestOptions(dry_run=dry_run, forced_doi=doi, project=project)
+    fetcher = Fetcher(
+        config.access, config.user.email, confirm_vpn=_confirm_vpn if interactive else None
+    )
+    return Ingestor(lib, config, client, options, fetcher=fetcher)
+
+
+def _run_ingest(
+    ingestor: Ingestor, paths: list[Path], dois: list[str], as_json: bool, dry_run: bool
+) -> None:
     try:
-        results = Ingestor(lib, config, client, options).run(paths)
+        results = ingestor.run(paths, dois)
     except (IngestError, LockedError) as exc:
         console.print(f"[red]✗[/] {escape(str(exc))}")
         raise typer.Exit(2) from exc
     if as_json:
         print(json.dumps([dataclasses.asdict(r) for r in results], ensure_ascii=False, indent=2))
     else:
-        if not config.user.email:
+        if not ingestor.config.user.email:
             console.print(
-                "[yellow]![/] Sin \\[user].email en config.toml: Crossref atiende más lento."
+                "[yellow]![/] Sin \\[user].email en config.toml: Crossref atiende más lento "
+                "y no se consulta Unpaywall (acceso abierto)."
             )
         _print_ingest(results, dry_run)
+        awaiting = sum(1 for r in results if r.outcome == "awaiting")
+        if awaiting and not dry_run:
+            console.print(
+                f"[dim]{awaiting} esperan PDF: reintenta con [bold]sb ingest --retry[/] o guarda "
+                "el PDF en inbox/ (sb pdf open KEY lo abre en el navegador).[/]"
+            )
     if any(r.outcome in ("error", "offline") for r in results):
         raise typer.Exit(1)
+
+
+@app.command()
+def ingest(
+    ctx: typer.Context,
+    items: Annotated[
+        list[str] | None,
+        typer.Argument(help="PDFs o DOIs (por defecto, todos los PDFs de inbox/)."),
+    ] = None,
+    dois: Annotated[
+        Path | None, typer.Option("--dois", help="Archivo con un DOI por línea.")
+    ] = None,
+    retry: Annotated[
+        bool, typer.Option(help="Reintentar la descarga de los que esperan PDF.")
+    ] = False,
+    doi: Annotated[str | None, typer.Option(help="Forzar el DOI (solo con un PDF).")] = None,
+    project: Annotated[
+        str | None, typer.Option(help="Asignar lo ingerido a un proyecto existente.")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option(help="Mostrar qué pasaría sin escribir, mover ni descargar.")
+    ] = False,
+    limit: Annotated[
+        int | None, typer.Option(min=1, help="Procesar como máximo N elementos.")
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Ingiere PDFs o DOIs: metadatos, descarga, duplicados, texto completo y pdfs/."""
+    lib = Library(_home(ctx))
+    paths: list[Path] = []
+    wanted: list[str] = []
+    for item in items or []:
+        path = Path(item).expanduser()
+        if path.is_file():
+            paths.append(path.resolve())
+        elif DOI_RE.fullmatch(normalize_doi(item)):
+            wanted.append(item)
+        else:
+            console.print(f"[red]✗[/] {escape(item)} no es un archivo ni un DOI")
+            raise typer.Exit(2)
+    if dois is not None:
+        lines = dois.expanduser().read_text(encoding="utf-8").splitlines()
+        wanted += [line.strip() for line in lines if line.strip() and not line.startswith("#")]
+    options = IngestOptions(dry_run=dry_run, forced_doi=doi, project=project)
+    ingestor = _ingestor(lib, options, interactive=sys.stdin.isatty() and not as_json)
+    if retry:
+        wanted += ingestor.pending_dois()
+    if not items and dois is None and not retry:
+        paths = lib.inbox_pdfs()
+    if limit:
+        paths = paths[:limit]
+        wanted = wanted[: max(0, limit - len(paths))]
+    _run_ingest(ingestor, paths, wanted, as_json, dry_run)
 
 
 def _read_paper(lib: Library, citekey: str):
@@ -403,3 +455,109 @@ def remove(
     console.print(
         "Si te arrepientes: git restore library/ (antes del commit); después sigue en el historial de git."
     )
+
+
+@pdf_app.command("status")
+def pdf_status(
+    ctx: typer.Context,
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Artículos que esperan PDF o cuyo PDF no está en esta máquina."""
+    lib = Library(_home(ctx))
+    log_path = lib.cache_dir / "fetch.json"
+    log = json.loads(log_path.read_text(encoding="utf-8")) if log_path.is_file() else {}
+    rows = []
+    for doc in lib.iter_papers():
+        if isinstance(doc, InvalidDocument):
+            continue
+        paper = doc.meta
+        if (lib.pdfs_dir / f"{paper.citekey}.pdf").exists():
+            continue
+        state = "esperando PDF" if paper.pdf is None else "no está en esta máquina"
+        last = log.get(normalize_doi(paper.doi)) if paper.doi else None
+        rows.append(
+            {
+                "citekey": paper.citekey,
+                "doi": paper.doi,
+                "state": state,
+                "last_attempt": last,
+            }
+        )
+    if as_json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return
+    if not rows:
+        console.print("[green]✓[/] Todos los artículos tienen su PDF en esta máquina.")
+        return
+    for row in rows:
+        reason = (
+            f"  [dim]{escape(row['last_attempt']['message'])}[/]" if row["last_attempt"] else ""
+        )
+        console.print(f"[yellow]…[/] [bold]{row['citekey']}[/] {row['state']}{reason}")
+    console.print(f"\n{len(rows)} sin PDF local. Descárgalos con: sb pdf get --missing")
+
+
+@pdf_app.command("get")
+def pdf_get(
+    ctx: typer.Context,
+    citekeys: Annotated[list[str] | None, typer.Argument(help="Citekeys a descargar.")] = None,
+    missing: Annotated[
+        bool, typer.Option(help="Todos los que no tienen PDF en esta máquina.")
+    ] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Descarga a pdfs/ el PDF de artículos ya registrados."""
+    lib = Library(_home(ctx))
+    ingestor = _ingestor(lib, IngestOptions(), interactive=sys.stdin.isatty() and not as_json)
+    wanted = ingestor.pending_dois(only_awaiting=False) if missing else []
+    for citekey in citekeys or []:
+        paper = _read_paper(lib, citekey).meta
+        if not paper.doi:
+            console.print(f"[red]✗[/] {citekey} no tiene DOI: no se puede descargar")
+            raise typer.Exit(1)
+        wanted.append(paper.doi)
+    if not wanted:
+        console.print("Nada que descargar.")
+        return
+    _run_ingest(ingestor, [], wanted, as_json, dry_run=False)
+
+
+@pdf_app.command("open")
+def pdf_open(
+    ctx: typer.Context,
+    citekey: Annotated[str | None, typer.Argument(help="Citekey del artículo.")] = None,
+    awaiting: Annotated[
+        bool, typer.Option(help="Abrir en el navegador los artículos que esperan PDF.")
+    ] = False,
+    limit: Annotated[int, typer.Option(min=1, help="Máximo de pestañas con --awaiting.")] = 10,
+) -> None:
+    """Abre el PDF local o, si no está, la página del artículo en el navegador."""
+    lib = Library(_home(ctx))
+    if awaiting:
+        pending = [
+            d.meta
+            for d in lib.iter_papers()
+            if not isinstance(d, InvalidDocument) and d.meta.status == "awaiting_pdf" and d.meta.doi
+        ]
+        for paper in pending[:limit]:
+            console.print(f"[yellow]…[/] {paper.citekey}  https://doi.org/{paper.doi}")
+            webbrowser.open_new_tab(f"https://doi.org/{paper.doi}")
+        console.print(
+            f"\nAbrí {min(limit, len(pending))} de {len(pending)}. Descarga los PDFs y luego: "
+            "[bold]sb ingest ~/Downloads/*.pdf[/] (cada uno se asocia a su registro por su DOI)."
+        )
+        return
+    if citekey is None:
+        console.print("[red]✗[/] indica un citekey o usa --awaiting")
+        raise typer.Exit(2)
+    paper = _read_paper(lib, citekey).meta
+    local = lib.pdfs_dir / f"{citekey}.pdf"
+    if local.exists():
+        subprocess.run(["open", str(local)], check=False)
+    elif paper.doi:
+        console.print("No está en esta máquina; abro la página del artículo.")
+        console.print("[dim]Guarda el PDF en inbox/ y ejecuta sb ingest: se asocia solo.[/]")
+        webbrowser.open(f"https://doi.org/{paper.doi}")
+    else:
+        console.print(f"[red]✗[/] {citekey} no tiene PDF local ni DOI")
+        raise typer.Exit(1)

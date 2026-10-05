@@ -608,7 +608,7 @@ Orden de intentos:
    - Respuesta de acceso denegado (401/403, página de login o paywall) → **mensaje de VPN**: *"La editorial pidió autenticación. ¿Está activo el OpenVPN de la UNAM? Actívalo y presiona Enter para reintentar, o [s] para dejarlo pendiente."* Si ya estás en la red UNAM, el mensaje cambia: probablemente la suscripción no cubre esa revista. En modo no interactivo (`--json`, agentes), el estado es `needs_vpn`, y el agente te lo pide con las mismas palabras.
    - Bloqueo anti-robots (algunas editoriales, como ScienceDirect, lo hacen aunque tengas acceso) → `sb pdf open KEY` abre el DOI en tu navegador. Guardas el PDF en `inbox/` y el siguiente `sb ingest` lo asocia solo a su registro (paso 3 de §5.1).
    - Al final de cada ingesta, el reporte recuerda cuántos quedan en `awaiting_pdf` y sugiere `uv run sb ingest --retry` con el VPN activo.
-4. **Más adelante (fase 8):** las APIs de minería de texto de algunas editoriales (Elsevier, Wiley) entregan PDFs a instituciones suscritas con una llave gratuita. Esto cubriría justo las editoriales que bloquean robots. Las llaves irían en `.env`.
+4. **Descartado (2026-10-04):** usar las APIs de minería de texto de Elsevier y Wiley. El usuario prefiere conseguir los PDFs a mano.
 
 Reglas de cortesía, para que una editorial no bloquee a toda la UNAM: una descarga a la vez, una pausa entre descargas (`seconds_between_downloads`) y un máximo por ejecución (`max_downloads_per_run`). Nunca descargas masivas (§10).
 
@@ -1012,11 +1012,18 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 2: Ingesta por DOI y descarga de PDFs
 
-- [ ] `sb ingest DOI…`, `--dois`, `--retry`; estado `awaiting_pdf`.
-- [ ] Acceso abierto (Unpaywall, arXiv).
-- [ ] Detección de red UNAM por IP pública (`[access].ip_ranges`) y mensaje de OpenVPN interactivo / `needs_vpn`.
-- [ ] Descarga institucional vía `citation_pdf_url` y enlaces de Crossref; validación `%PDF` + título; reglas de cortesía.
-- [ ] `sb pdf status/get/open`.
+- [x] `sb ingest DOI…`, `--dois`, `--retry`; estado `awaiting_pdf`.
+- [x] Acceso abierto (Unpaywall, arXiv).
+- [x] Detección de red UNAM por IP pública (`[access].ip_ranges`) y mensaje de OpenVPN interactivo / `needs_vpn`.
+- [x] Descarga institucional vía `citation_pdf_url` y enlaces de Crossref; validación `%PDF` + título; reglas de cortesía.
+- [x] `sb pdf status/get/open`.
+
+**Terminada el 2026-10-04**, con 20 DOIs de tu Zotero y el OpenVPN activo:
+
+- Solo 4 se descargaron solos: 2 de IOP (enlace de Crossref), 1 de arXiv y 1 de una revista mexicana. Los otros 16 quedaron en `awaiting_pdf` con su motivo.
+- Casi todas las editoriales (Elsevier, MDPI, Springer, EDP, ACM, SSRN) bloquean a cualquier cliente que no sea un navegador, aun desde la red UNAM. Esto no depende de la suscripción: son protecciones anti-robots, y no se esquivan. `sb` lo reporta como "la editorial bloquea las descargas automáticas".
+- **Decisión del usuario:** no invertir más en descargas automáticas. El flujo principal sigue siendo soltar PDFs en `inbox/`. Para los que esperan PDF, `sb pdf open --awaiting` los abre en el navegador y `sb ingest ~/Downloads/*.pdf` los asocia a su registro.
+- Sin `[user].email`, no se consulta Unpaywall.
 
 **Terminado cuando:** con 20 DOIs de editoriales distintas, cada uno termina descargado o en `awaiting_pdf` con un motivo claro; sin VPN se te pide activarlo, y con VPN `--retry` recupera los que tu suscripción cubre.
 
@@ -1064,7 +1071,6 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 8: Extras (según necesidad)
 
-- [ ] APIs de minería de texto de Elsevier y Wiley para descargas institucionales que hoy bloquean robots.
 - [ ] Más campos de clasificación (clima Köppen, tipo de edificación, escala) y `sb process --reclassify`.
 - [ ] Grafo de citas dentro de la biblioteca: "¿qué artículos muy citados por mi biblioteca me faltan?".
 - [ ] Alerta de retractaciones en `sb check --retractions` (Crossref publica los datos de Retraction Watch).
@@ -1225,4 +1231,6 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 | 2026-10-04 | Fase 1 terminada | `sb ingest`, `show`, `text`, `remove`; probado con 20 PDFs reales |
 
-**Próximo paso:** fase 2 (ingesta por DOI y descarga de PDFs).
+| 2026-10-04 | Fase 2 terminada | Ingesta por DOI, `awaiting_pdf`, detección de red y OpenVPN, `sb pdf`; casi todas las editoriales bloquean robots y no se insistirá en descargas automáticas |
+
+**Próximo paso:** fase 3 (proyectos y BibTeX).

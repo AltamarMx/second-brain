@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import fcntl
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -23,8 +24,9 @@ from rapidfuzz import fuzz
 
 from ..citekey import make_citekey
 from ..config import LibraryConfig
+from ..fetch.download import FetchedPdf, Fetcher, FetchFailure
 from ..library import Library
-from ..models import FullText, Paper, PdfInfo, Provenance
+from ..models import FullText, Paper, PdfInfo, PdfSource, Provenance
 from ..textutil import normalize_for_match
 from .dedupe import LibraryIndex
 from .doi import doi_variants, find_arxiv, find_dois, normalize_doi
@@ -37,7 +39,9 @@ from .metadata import (
     datacite_fields,
 )
 
-Outcome = Literal["ingested", "review", "attached", "relinked", "duplicate", "error", "offline"]
+Outcome = Literal[
+    "ingested", "review", "attached", "relinked", "awaiting", "duplicate", "error", "offline"
+]  # fmt: skip
 TITLE_ON_PAGE = 90
 YEAR_RE = re.compile(r"(?<!\d)(19|20)\d{2}(?!\d)")
 MAX_DOI_CANDIDATES = 8
@@ -143,28 +147,45 @@ class Ingestor:
         config: LibraryConfig,
         client: MetadataClient,
         options: IngestOptions | None = None,
+        fetcher: Fetcher | None = None,
     ):
         self.lib = lib
         self.config = config
         self.client = client
         self.options = options or IngestOptions()
+        self.fetcher = fetcher
         self.index = LibraryIndex.build(lib)
 
     # --- entry point ----------------------------------------------------------
 
-    def run(self, paths: list[Path]) -> list[IngestResult]:
+    def run(self, paths: list[Path], dois: list[str] | None = None) -> list[IngestResult]:
         project = self.options.project
         if project and not self.lib.project_path(project).is_file():
             raise IngestError(f"el proyecto '{project}' no existe (créalo con sb project create)")
-        if self.options.forced_doi and len(paths) != 1:
+        if self.options.forced_doi and (len(paths) != 1 or dois):
             raise IngestError("--doi solo se puede usar con un único PDF")
         with ingest_lock(self.lib):
-            return [self.ingest_one(path) for path in paths]
+            results = [self.ingest_one(path) for path in paths]
+            results += [self.ingest_doi(doi) for doi in dois or []]
+            return results
 
-    def ingest_one(self, path: Path) -> IngestResult:
+    def pending_dois(self, only_awaiting: bool = True) -> list[str]:
+        """DOIs whose PDF is missing: awaiting ones, or also those absent from this machine."""
+        dois = []
+        for citekey, paper in sorted(self.index.papers.items()):
+            if not paper.doi:
+                continue
+            missing_here = not (self.lib.pdfs_dir / f"{citekey}.pdf").exists()
+            if paper.status == "awaiting_pdf" or (not only_awaiting and missing_here):
+                dois.append(paper.doi)
+        return dois
+
+    def ingest_one(
+        self, path: Path, expected_doi: str | None = None, source: PdfSource = "inbox"
+    ) -> IngestResult:
         result = IngestResult(source=path.name, outcome="error")
         try:
-            return self._ingest(path, result)
+            return self._ingest(path, result, expected_doi, source)
         except NetworkError as exc:
             result.outcome = "offline"
             result.message = f"{exc}. El PDF se queda en su lugar; reintenta con conexión."
@@ -178,19 +199,21 @@ class Ingestor:
 
     # --- steps ------------------------------------------------------------------
 
-    def _ingest(self, path: Path, result: IngestResult) -> IngestResult:
+    def _ingest(
+        self, path: Path, result: IngestResult, expected_doi: str | None, source: PdfSource
+    ) -> IngestResult:
         sha = sha256_file(path)
         existing = self.index.find_by_sha(sha)
         if existing:
             return self._known_file(path, existing, result)
 
         extraction = extract(path, ocr_languages=self.config.extract.ocr_languages)
-        resolved = self._resolve(extraction)
+        resolved = self._resolve(extraction, expected_doi)
         doi = resolved.fields.get("doi")
         result.doi = doi
 
         if doi and (match := self.index.find_by_doi(doi)):
-            return self._known_doi(path, match, sha, extraction, result)
+            return self._known_doi(path, match, sha, extraction, result, source)
 
         flags = list(resolved.flags)
         if extraction.ocr:
@@ -217,7 +240,7 @@ class Ingestor:
                     "arxiv": find_arxiv(extraction.front_text),
                 },
                 "projects": self._membership(),
-                "pdf": self._pdf_info(path, sha, extraction),
+                "pdf": self._pdf_info(path, sha, extraction, source),
                 "status": status,
                 "flags": sorted(set(flags)),
                 "added": self.options.today,
@@ -259,17 +282,22 @@ class Ingestor:
             return datacite_fields(attributes), "datacite", []
         return None
 
-    def _resolve(self, extraction: Extraction) -> Resolved:
+    def _resolve(self, extraction: Extraction, expected_doi: str | None = None) -> Resolved:
         page_text = normalize_for_match(extraction.front_text)[:8000]
 
-        if self.options.forced_doi:
-            found = self._lookup(normalize_doi(self.options.forced_doi))
+        forced = self.options.forced_doi or expected_doi
+        if forced:
+            found = self._lookup(normalize_doi(forced))
             if not found:
-                raise IngestError(
-                    f"el DOI {self.options.forced_doi} no existe en Crossref ni DataCite"
-                )
+                raise IngestError(f"el DOI {forced} no existe en Crossref ni DataCite")
             fields, source, relations = found
             ok = title_on_page(fields["title"], page_text)
+            if not self.options.forced_doi:  # a downloaded PDF must show its title
+                return Resolved(
+                    fields, source, validated=ok, relations=relations,
+                    flags=[] if ok else ["metadata_mismatch"],
+                    note="" if ok else "el PDF descargado no muestra el título del DOI; revísalo",
+                )  # fmt: skip
             return Resolved(
                 fields, source, validated=True, relations=relations,
                 flags=[] if ok else ["metadata_mismatch"],
@@ -337,12 +365,14 @@ class Ingestor:
             return {}
         return {self.options.project: {"added": self.options.today}}
 
-    def _pdf_info(self, path: Path, sha: str, extraction: Extraction) -> PdfInfo:
+    def _pdf_info(
+        self, path: Path, sha: str, extraction: Extraction, source: PdfSource = "inbox"
+    ) -> PdfInfo:
         return PdfInfo(
             sha256=sha,
             pages=extraction.page_count,
             size_bytes=path.stat().st_size,
-            source="inbox",
+            source=source,
             original_filename=path.name,
         )
 
@@ -364,7 +394,13 @@ class Ingestor:
         return result
 
     def _known_doi(
-        self, path: Path, citekey: str, sha: str, extraction: Extraction, result: IngestResult
+        self,
+        path: Path,
+        citekey: str,
+        sha: str,
+        extraction: Extraction,
+        result: IngestResult,
+        source: PdfSource = "inbox",
     ) -> IngestResult:
         paper = self.index.papers[citekey]
         result.citekey = citekey
@@ -373,7 +409,7 @@ class Ingestor:
             body = fulltext_body(extraction.pages)
             updated = paper.model_copy(
                 update={
-                    "pdf": self._pdf_info(path, sha, extraction),
+                    "pdf": self._pdf_info(path, sha, extraction, source),
                     "status": "needs_processing"
                     if paper.status == "awaiting_pdf"
                     else paper.status,
@@ -423,3 +459,107 @@ class Ingestor:
         path.rename(target)
         if reason:
             target.with_suffix(".motivo.txt").write_text(reason + "\n", encoding="utf-8")
+
+    # --- by DOI -------------------------------------------------------------------
+
+    def ingest_doi(self, raw: str) -> IngestResult:
+        doi = normalize_doi(raw)
+        result = IngestResult(source=doi, outcome="error", doi=doi)
+        try:
+            existing = self.index.find_by_doi(doi)
+            if existing:
+                result.citekey = existing
+                paper = self.index.papers[existing]
+                if paper.pdf is not None and (self.lib.pdfs_dir / f"{existing}.pdf").exists():
+                    result.outcome = "duplicate"
+                    result.message = f"ya está en la biblioteca como {existing}"
+                    return result
+                return self._download_into(
+                    doi, self.client.crossref_work(doi), paper.ids.arxiv, result
+                )
+            found = self._lookup(doi)
+            if not found:
+                raise IngestError(f"el DOI {doi} no existe en Crossref ni DataCite")
+            fields, source, relations = found
+            outcome = self._download_into(doi, self.client.crossref_work(doi), None, result)
+            if outcome.outcome == "awaiting":
+                self._register_awaiting(fields, source, relations, outcome)
+            return outcome
+        except NetworkError as exc:
+            result.outcome = "offline"
+            result.message = f"{exc}. Reintenta con conexión."
+        except IngestError as exc:
+            result.message = str(exc)
+        return result
+
+    def _download_into(
+        self, doi: str, crossref: dict[str, Any] | None, arxiv: str | None, result: IngestResult
+    ) -> IngestResult:
+        if self.fetcher is None:
+            raise IngestError("la descarga de PDFs no está disponible")
+        if self.options.dry_run:
+            result.outcome, result.status = "awaiting", "awaiting_pdf"
+            result.message = "(simulación) se intentaría descargar el PDF"
+            return result
+        dest = self.lib.inbox_dir / f"doi-{re.sub(r'[^a-z0-9.-]+', '_', doi)}.pdf"
+        try:
+            fetched: FetchedPdf = self.fetcher.fetch(doi, dest, crossref=crossref, arxiv=arxiv)
+        except FetchFailure as failure:
+            if failure.reason == "offline":
+                raise NetworkError(str(failure)) from failure
+            self._log_fetch(doi, failure.reason, str(failure))
+            result.outcome, result.status = "awaiting", "awaiting_pdf"
+            result.message = f"sin PDF: {failure}"
+            return result
+        self._log_fetch(doi, None, None)
+        ingested = self.ingest_one(fetched.path, expected_doi=doi, source=fetched.source)
+        ingested.source = doi
+        via = {"openaccess": "acceso abierto", "institutional": "acceso institucional"}[
+            fetched.source
+        ]
+        ingested.message = "; ".join(
+            m for m in (f"PDF por {via} ({fetched.via})", ingested.message) if m
+        )
+        return ingested
+
+    def _register_awaiting(
+        self, fields: dict[str, Any], source: str, relations: list[str], result: IngestResult
+    ) -> None:
+        family = (fields.get("authors") or [{}])[0].get("family")
+        resolved = Resolved(fields, source, validated=True, relations=relations)
+        similar = self._similar(resolved, family)
+        citekey = make_citekey(
+            family, fields.get("year"), fields.get("title"), set(self.index.papers)
+        )
+        paper = Paper.model_validate(
+            {
+                **fields,
+                "citekey": citekey,
+                "projects": self._membership(),
+                "status": "awaiting_pdf",
+                "flags": ["possible_duplicate"] if similar else [],
+                "added": self.options.today,
+                "provenance": Provenance(metadata_source=source),
+            }
+        )
+        if not self.options.dry_run:
+            self.lib.write_paper(paper)
+        self.index.add(paper)
+        result.citekey = citekey
+        if similar:
+            result.message += f"; parecido a {similar}"
+
+    def _log_fetch(self, doi: str, reason: str | None, message: str | None) -> None:
+        """Last failed download per DOI, in ``.cache/fetch.json`` (local, for ``sb pdf status``)."""
+        path = self.lib.cache_dir / "fetch.json"
+        log = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        if reason is None:
+            log.pop(doi, None)
+        else:
+            log[doi] = {
+                "date": self.options.today.isoformat(),
+                "reason": reason,
+                "message": message,
+            }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(log, ensure_ascii=False, indent=2), encoding="utf-8")

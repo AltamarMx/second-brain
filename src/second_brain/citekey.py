@@ -29,8 +29,12 @@ def _slug_word(text: str) -> str:
 
 
 def family_part(family: str | None) -> str:
-    """``van der Berg`` → ``vanderberg``; ``García-López`` → ``garcialopez``."""
-    return _slug_word(family or "") or "anon"
+    """``van der Berg`` → ``vanderberg``; ``García-López`` → ``garcialopez``;
+    organizations keep their first word (``Universidad Autónoma…`` → ``universidad``)."""
+    words = (family or "").split()
+    if len(words) > 3:  # an organization as author: "Universidad Autónoma de Baja California"
+        words = [w for w in words if _slug_word(w) not in STOPWORDS][:1]
+    return _slug_word("".join(words)) or "anon"
 
 
 def title_word(title: str | None) -> str:

@@ -32,6 +32,9 @@ def test_citekeys():
     assert make_citekey("Müller", None, None, set()) == "mullernd"
     assert make_citekey(None, 2019, "Análisis del ciclo", set()) == "anon2019analisis"
     assert make_citekey("Ng", 2020, "x", {"ng2020", "ng2020-b"}) == "ng2020-c"
+    assert make_citekey("Universidad Autónoma de Baja California", 2024, "Aproximación", set()) == (
+        "universidad2024aproximacion"
+    )
     assert title_word("<i>CO2</i> emissions of 2020 buildings") == "co2"
 
 

@@ -29,7 +29,7 @@ Versión del esquema: **1**.
 | `pdfs/` | solo `.gitkeep` | PDFs ingeridos (`{citekey}.pdf`), locales |
 | `.githooks/pre-commit` | sí | Ejecuta `sb check --fast` |
 | `.env` | no | Secretos (`.env.example` sí va en git) |
-| `.cache/` | no | Derivados: índice, caché HTTP |
+| `.cache/` | no | Derivados: índice, caché HTTP (`http/`), último intento de descarga por DOI (`fetch.json`) |
 
 ## Identificadores
 
