@@ -206,13 +206,13 @@ El `pyproject.toml` del repo de datos solo declara la dependencia:
 
 ```bash
 # una sola vez, dentro de ~/biblioteca
-uv add "second-brain @ git+ssh://git@github.com/AltamarMx/second-brain"
+uv add "second-brain @ git+https://github.com/AltamarMx/second-brain"
 ```
 
 - **Usar:** dentro de `~/biblioteca`, `uv run sb …` ejecuta la versión fijada en su `uv.lock`. Todas tus máquinas usan exactamente la misma versión.
 - **Actualizar el código en la biblioteca:** `uv lock --upgrade-package second-brain && uv sync`, y luego commit del `uv.lock`. El resto de las máquinas lo reciben con `sb sync`.
 - **Desarrollar:** desde el repo de código, `uv run sb --home ~/biblioteca …` prueba el código en desarrollo sobre tus datos reales sin tocar el `uv.lock` de la biblioteca.
-- **Acceso:** al ser privado, uv usa tus credenciales de git (llave SSH o `gh auth`) para descargarlo.
+- **Acceso:** al ser privado, uv usa tus credenciales de git (las mismas de `git push`) para descargarlo.
 - **Otras personas:** clonan o instalan `second-brain`, ejecutan `uv run sb init ~/su-biblioteca` y obtienen su propia biblioteca vacía con su configuración (institución, rangos de IP, correo). Nunca ven tus datos.
 - **Compatibilidad:** los datos llevan `schema_version`. Si la biblioteca es más nueva que el código instalado, `sb` se niega a escribir y te dice cómo actualizar (§4.6).
 
@@ -977,14 +977,16 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 
 ### Fase 0: Cimientos (dos repos, configuración, contrato de datos)
 
-- [ ] Convertir este repo en paquete `src/second_brain/` (`[build-system]` con `uv_build`, `[project.scripts]` con `sb` y `sb-mcp`) y eliminar `main.py`.
-- [ ] `config.py` y `machines.py`: `config.toml`, perfiles de máquina, `.env`, `SB_HOME`, `SB_MACHINE`.
-- [ ] Modelos pydantic (`Paper`, `Project`, `FullText`, `Classification`) y `library.py` (escritura atómica y determinista).
-- [ ] `LICENSE` (AGPL-3.0-or-later).
-- [ ] `sb init RUTA` (esqueleto del repo de datos con `.gitkeep`, `.gitignore`, `.gitattributes`, hook de git con `sb check --fast`), `sb machine init`, `sb doctor`, `sb check`, `sb status`.
-- [ ] ruff + pytest + pre-commit + CI en el repo de código.
-- [ ] Esqueleto de documentación (§11).
-- [ ] Crear los dos repos **privados** en GitHub; en `biblioteca`, `uv add` del paquete por git y comprobar `uv run sb --help`.
+- [x] Convertir este repo en paquete `src/second_brain/` (`[build-system]` con `uv_build`, `[project.scripts]` con `sb` y `sb-mcp`) y eliminar `main.py`.
+- [x] `config.py` y `machines.py`: `config.toml`, perfiles de máquina, `.env`, `SB_HOME`, `SB_MACHINE`.
+- [x] Modelos pydantic (`Paper`, `Project`, `FullText`, `Classification`) y `library.py` (escritura atómica y determinista).
+- [x] `LICENSE` (AGPL-3.0-or-later).
+- [x] `sb init RUTA` (esqueleto del repo de datos con `.gitkeep`, `.gitignore`, `.gitattributes`, hook de git con `sb check --fast`), `sb machine init`, `sb doctor`, `sb check`, `sb status`.
+- [x] ruff + pytest + pre-commit + CI en el repo de código.
+- [x] Esqueleto de documentación (§11).
+- [x] Crear los dos repos **privados** en GitHub; en `biblioteca`, `uv add` del paquete por git y comprobar `uv run sb --help`.
+
+**Terminada el 2026-10-04.** Biblioteca en `~/biblioteca` con el código fijado por git en su `uv.lock`; 29 pruebas y CI en verde. Pendiente: llenar `[user].email` en `config.toml` de la biblioteca.
 
 **Terminado cuando:** en `~/biblioteca`, `uv run sb check` pasa sobre una biblioteca vacía, `uv run sb doctor` reconoce la máquina, y la CI del código está en verde.
 
@@ -1210,4 +1212,6 @@ Lo que antes era global ya no lo es: `uv tool install` se sustituye por `uv run`
 | 2026-10-04 | v0.4: tercera ronda | Sin dependencia de Zotero (`sb import bib` genérico); Mac mini Intel 48 GB con Claude; licencia MIT con pypdfium2 + pdfplumber en lugar de PyMuPDF; los PDFs ingeridos se conservan en `pdfs/`, locales y sin respaldo |
 | 2026-10-04 | v0.5 | De vuelta a PyMuPDF (pymupdf4llm); licencia AGPL-3.0-or-later en lugar de MIT |
 
-**Próximo paso:** arrancar la fase 0. No quedan decisiones abiertas que la bloqueen.
+| 2026-10-04 | Fase 0 terminada | Paquete `sb` (init, machine, doctor, check, status), esquema v1, CI; biblioteca inicializada con perfil `imac` |
+
+**Próximo paso:** fase 1 (ingesta desde `inbox/`).
