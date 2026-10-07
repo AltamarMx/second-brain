@@ -20,6 +20,21 @@ uv run sb doctor
 
 `sb init` nunca sobrescribe archivos existentes (salvo con `--force`), así que puede correrse sobre una carpeta que ya tiene contenido.
 
+## Actualizar una biblioteca
+
+Cuando hay una versión nueva de `second-brain` en GitHub:
+
+```bash
+cd ~/biblioteca
+uv sync --upgrade-package second-brain   # trae la versión nueva de sb
+uv run sb agents sync                    # AGENTS.md, skills sb-*, .claude/settings.json y OpenCode
+uv run sb migrate                        # lleva los registros al esquema actual (no toca los que ya lo están)
+uv run sb check
+git add -A && git commit -m "agents: actualizar second-brain"
+```
+
+`sb agents sync` solo reemplaza lo que está entre las marcas `sb:begin`/`sb:end` de `AGENTS.md`: lo que escribiste fuera del bloque, tus propias skills y tus permisos se conservan. El commit lleva el `uv.lock` nuevo, así que en las otras computadoras basta `git pull && uv sync`.
+
 ## Comandos disponibles
 
 | Comando | Qué hace |
