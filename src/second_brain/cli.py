@@ -1629,15 +1629,21 @@ def refs(
     with console.status("Leyendo las referencias de Crossref…"):
         graph = build_graph(lib, MetadataClient(lib.cache_dir, email=config.user.email))
     if html:
-        titles = {
-            d.meta.citekey: d.meta.title
-            for d in lib.iter_papers()
-            if not isinstance(d, InvalidDocument)
+        papers = {
+            d.meta.citekey: d.meta for d in lib.iter_papers() if not isinstance(d, InvalidDocument)
         }
         out = output.expanduser() if output else lib.cache_dir / "grafo.html"
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(graph_html(graph, titles, min_count), encoding="utf-8")
+        out.write_text(graph_html(graph, papers, min_count), encoding="utf-8")
         console.print(f"[green]✓[/] Grafo guardado en {escape(str(out))}")
+        undated = sorted(k for k, p in papers.items() if p.year is None)
+        if undated:
+            shown = ", ".join(undated[:10]) + (" …" if len(undated) > 10 else "")
+            console.print(
+                f"[yellow]![/] {len(undated)} sin año (fijos en la animación, marcados como "
+                f"pendientes): {shown}\n    [dim]Complétalo con year: en "
+                f"{lib.papers_dir.relative_to(lib.home)}/KEY.md[/]"
+            )
         if open_browser:
             webbrowser.open(out.resolve().as_uri())
         return

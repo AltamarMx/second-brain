@@ -1,4 +1,5 @@
 import json
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -8,7 +9,7 @@ from test_processing import FULLTEXT, TODAY, FakeBackend
 from typer.testing import CliRunner
 
 from second_brain.checks import run_checks
-from second_brain.citations import build_graph, graph_html, missing_works
+from second_brain.citations import CitedWork, Graph, build_graph, graph_html, missing_works
 from second_brain.cli import app
 from second_brain.config import load_config
 from second_brain.index import Filters, SearchIndex
@@ -113,10 +114,43 @@ def test_citation_graph(lib):
         "External work",
         ["b2021x", "c2022x"],
     )
-    page = graph_html(graph, {"a2020x": "A", "b2021x": "B", "c2022x": "C"})
+    page = graph_html(graph, {k: lib.read_paper(k).meta for k in ("a2020x", "b2021x", "c2022x")})
     assert (
         "vis-network" in page and '"from": "c2022x", "to": "a2020x"' in page and "10.9/ext" in page
     )
+
+
+def graph_nodes(page):
+    return {n["id"]: n for n in json.loads(re.search(r"new vis.DataSet\((.*)\);", page)[1])}
+
+
+def test_graph_html_timeline():
+    papers = {
+        "a2020x": make_paper("a2020x", year=2020),
+        "b2021x": make_paper("b2021x", year=2021),
+        "nodate": make_paper("nodate", year=None),
+    }
+    graph = Graph(
+        cites={"b2021x": ["a2020x"], "nodate": ["a2020x"]},
+        cited_by={"a2020x": ["b2021x", "nodate"]},
+        references={},
+        external={
+            "10.9/old": CitedWork("10.9/old", "Old", None, "1998b", None, ["a2020x", "b2021x"]),
+            "10.9/undated": CitedWork("10.9/undated", None, None, None, None, ["b2021x", "nodate"]),
+            "10.9/orphan": CitedWork("10.9/orphan", None, None, None, None, ["nodate", "nodate2"]),
+        },
+        without_data=[],
+    )
+    nodes = graph_nodes(graph_html(graph, papers))
+    assert (nodes["a2020x"]["year"], nodes["b2021x"]["year"]) == (2020, 2021)
+    assert "pending" not in nodes["a2020x"]
+    # no year: frozen (always visible) and marked as pending
+    assert nodes["nodate"]["year"] is None and nodes["nodate"]["pending"] is True
+    assert "Año pendiente" in nodes["nodate"]["title"]
+    # outside works: their own year, else the first dated paper that cites them
+    assert nodes["10.9/old"]["year"] == 1998
+    assert nodes["10.9/undated"]["year"] == 2021
+    assert nodes["10.9/orphan"]["year"] is None and "pending" not in nodes["10.9/orphan"]
 
 
 # --- supplements ------------------------------------------------------------------
@@ -226,7 +260,7 @@ def test_check_flags_values_outside_vocabulary(lib):
 
 
 def test_refs_cli_html(lib, tmp_path, monkeypatch):
-    lib.write_paper(make_paper("a2020x", doi="10.1/a"))
+    lib.write_paper(make_paper("a2020x", doi="10.1/a", year=None))
     monkeypatch.setattr(
         "second_brain.ingest.metadata.MetadataClient.crossref_work",
         lambda self, doi, refresh=False: {"reference": []},
@@ -236,6 +270,7 @@ def test_refs_cli_html(lib, tmp_path, monkeypatch):
     result = cli(lib, "refs", "--html")
     default = lib.cache_dir / "grafo.html"
     assert result.exit_code == 0 and "a2020x" in default.read_text()
+    assert "1 sin año" in result.output and "a2020x" in result.output
     assert opened == [default.resolve().as_uri()]
     out = tmp_path / "grafo.html"
     assert cli(lib, "refs", "--html", "-o", str(out), "--no-open").exit_code == 0
