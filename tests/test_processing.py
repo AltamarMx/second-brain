@@ -224,6 +224,25 @@ def test_agents_sync_preserves_user_content(home):
     assert (home / "CLAUDE.md").read_text().strip() == "@AGENTS.md"
 
 
+def test_agents_md_lists_every_command():
+    from importlib.resources import files
+
+    from typer.main import get_command
+
+    text = files("second_brain.templates").joinpath("agents", "AGENTS.md").read_text()
+
+    def paths(group, prefix):
+        for name, command in group.commands.items():
+            if not command.hidden:
+                yield f"{prefix} {name}", command
+                yield from (
+                    paths(command, f"{prefix} {name}") if hasattr(command, "commands") else ()
+                )
+
+    missing = [path for path, _ in paths(get_command(cli.app), "sb") if f"`{path}" not in text]
+    assert missing == [], f"faltan en templates/agents/AGENTS.md: {missing}"
+
+
 # --- CLI ------------------------------------------------------------------------
 
 

@@ -171,6 +171,15 @@ def test_forced_doi(lib):
     assert result.outcome == "ingested"
 
 
+def test_forced_doi_is_validated_even_if_title_not_on_page(lib):
+    # documented in the agents' AGENTS.md: a hand-given DOI does not leave it in needs_review
+    make_pdf(lib.inbox_dir / "a.pdf", title="Manuscript 1 with numbered 2 lines", doi_line=None)
+    [result] = run(lib, FakeServices(), forced_doi=DOI)
+    paper = lib.read_paper(result.citekey).meta
+    assert (result.outcome, paper.status) == ("ingested", "needs_processing")
+    assert "metadata_mismatch" in paper.flags
+
+
 def test_forced_doi_requires_single_pdf(lib):
     make_pdf(lib.inbox_dir / "a.pdf")
     make_pdf(lib.inbox_dir / "b.pdf", title="Another title for a second test paper")

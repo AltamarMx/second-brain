@@ -20,6 +20,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - Fase 7: búsqueda híbrida (BM25 + embeddings multilingües locales con model2vec u Ollama, fusionados con RRF) en `sb search`, `sb passages`, `sb ask` y MCP; `--mode`; `sb eval search` (recall@k y MRR).
 - Fase 8: estado de lectura y calificación (`sb read`, `--reading`); notas de Crossref y retractaciones (`sb check --retractions`); grafo de citas (`sb refs`, `--missing`, `--html`, que guarda en `.cache/grafo.html` y abre el navegador); material suplementario (`sb attach`, `sb text --supplement`); campos de clasificación configurables (`[classification.*]`, `sb process --reclassify`, `--field`).
 - `sb refs --html`: línea de tiempo por año de publicación (▶ y control deslizante); los artículos sin `year` quedan fijos y marcados como pendientes, y `sb refs --html` los lista.
+- `AGENTS.md` de la biblioteca: lista de comandos (un test exige que estén todos los de la CLI) y comportamientos no obvios; la skill `sb-ingerir` explica cómo resolver `needs_review`.
 - `sb ingest --all [--push]`: ingerir, procesar todo lo pendiente, validar y hacer commit en un solo paso.
 
 ### Cambiado
