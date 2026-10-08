@@ -6,6 +6,7 @@ Extrae **solo lo que esté escrito en estas páginas**; si un dato no aparece, d
 - authors: los autores en orden; cada uno con family (apellidos completos, incluidos los dos apellidos hispanos) y given (nombres). Una organización autora va completa en family, con given null. No incluyas asesores, directores de tesis, revisores ni editores.
 - year: el año de publicación. No uses números de ISSN o ISBN, teléfonos, el periodo estudiado ni las fechas de recepción o aceptación si aparece la de publicación.
 - type: uno de $types. Tesis → "thesis"; informe técnico → "report"; artículo de revista → "article-journal"; ponencia en congreso → "paper-conference"; capítulo → "chapter"; libro → "book".
+- genre: solo en tesis, el grado: "phd" (doctorado), "masters" (maestría) o "bachelors" (licenciatura o ingeniería); null en lo demás.
 - container_title: la revista, el libro o la serie donde se publicó; null en tesis e informes sueltos.
 - publisher: la editorial; en tesis e informes, la institución.
 - doi: el DOI si aparece escrito (solo `10.…`, sin "https://doi.org/"); null si no.

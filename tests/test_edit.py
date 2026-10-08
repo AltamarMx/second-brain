@@ -121,6 +121,16 @@ def test_rekey_to_a_chosen_key_and_conflicts(lib):
     assert result.citekey == "consumo2018" and lib.paper_path("consumo2018").is_file()
 
 
+def test_edit_genre(lib):
+    anon_paper(lib, type="thesis")
+    assert edit_paper(lib, "anon2007consumo", {"genre": "masters"}).changed == ["genre"]
+    assert lib.read_paper("anon2007consumo").meta.genre == "masters"
+    with pytest.raises(EditError, match="grado desconocido"):
+        edit_paper(lib, "anon2007consumo", {"genre": "maestria"})
+    edit_paper(lib, "anon2007consumo", {"genre": ""})
+    assert lib.read_paper("anon2007consumo").meta.genre is None
+
+
 def test_dry_run_writes_nothing(lib):
     anon_paper(lib)
     before = {p: p.read_bytes() for p in lib.home.rglob("*") if p.is_file()}

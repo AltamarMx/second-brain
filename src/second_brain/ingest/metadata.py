@@ -127,6 +127,18 @@ def _abstract(raw: str | None) -> str | None:
     return "\n\n".join(paragraphs) or None
 
 
+def thesis_genre(text: str | None) -> str | None:
+    """Degree of a thesis from free text: "Tesis de maestría", "PhD", "Bachelor's thesis"…"""
+    text = (text or "").lower()
+    if re.search(r"licenciatura|bachelor|undergraduate|\bb\.?sc\b|grado de ingenier", text):
+        return "bachelors"
+    if re.search(r"maestr|master|magíster|magister|mestrado|\bm\.?sc\b", text):
+        return "masters"
+    if re.search(r"doctor|\bph\.?\s?d\b|dissertation", text):
+        return "phd"
+    return None
+
+
 PARTICLES = {
     "de",
     "del",
@@ -182,6 +194,9 @@ def crossref_fields(message: dict[str, Any]) -> dict[str, Any]:
     licenses = message.get("license") or []
     return {
         "type": CROSSREF_TYPES.get(message.get("type", ""), "article"),
+        "genre": thesis_genre(" ".join(message.get("degree") or []))
+        if message.get("type") == "dissertation"
+        else None,
         "doi": message.get("DOI"),
         "ids": {"isbn": _first(message.get("ISBN"))},
         "title": _first(message.get("title")) or "(sin título)",

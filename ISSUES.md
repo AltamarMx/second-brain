@@ -19,7 +19,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 13 | media | Mensaje de error de descarga engañoso | ✅ resuelto |
 | 14 | media | `sb pdf get --json` informa un estado que no es el del registro | ✅ resuelto |
 | 15 | media | No hay forma de completar los PDFs locales desde una carpeta | ✅ resuelto |
-| 16 | baja | El grado de las tesis no se distingue | pendiente |
+| 16 | baja | El grado de las tesis no se distingue | ✅ resuelto |
 | 17 | baja | Se pierde el subíndice de CO₂ en BibTeX | pendiente |
 | 18 | baja | Las llaves de protección incluyen la puntuación (`{IoT,}`) | pendiente |
 | 19 | baja | Prefijos de commit inconsistentes | pendiente |
@@ -143,6 +143,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Dónde:** `bibtex.py` exporta toda tesis como `@phdthesis`.
 - **Evidencia:** en la biblioteca hay una de maestría (`anon2016universidad`) y una de licenciatura (`anonndtizacio`).
 - **Propuesta:** un campo `genre` o `degree` que permita exportar `@mastersthesis` y, en BibLaTeX, `type = mathesis`.
+- **Resolución:** Campo `genre` (`phd`, `masters`, `bachelors`; esquema 4). BibTeX: `@phdthesis`, `@mastersthesis`, y `@mastersthesis` con `type = {Tesis de licenciatura}` (o "Bachelor's thesis" si el idioma no es español); BibLaTeX: `@thesis` con `type = phdthesis`, `mathesis` o el texto de licenciatura. Se detecta al importar (`@mastersthesis`, campo `type`), del `degree` de Crossref y en la sugerencia del LLM; `sb edit KEY --genre masters` lo corrige.
 
 ### 17. Se pierde el subíndice de CO₂
 

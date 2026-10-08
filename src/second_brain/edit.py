@@ -30,8 +30,8 @@ from .models import CITEKEY_PATTERN, Paper
 
 REVIEW_FLAGS = {"doi_uncertain", "metadata_mismatch"}
 EDITABLE = (
-    "title", "authors", "year", "type", "container_title", "publisher", "volume", "issue",
-    "pages", "doi",
+    "title", "authors", "year", "type", "genre", "container_title", "publisher", "volume",
+    "issue", "pages", "doi",
 )  # fmt: skip
 FROM_DOI = (*EDITABLE, "ids", "abstract", "language", "license", "updates")
 
@@ -89,6 +89,12 @@ def edit_paper(
         raise EditError(
             f"tipo desconocido: {changes['type']!r} (usa {', '.join(sorted(BIBLATEX_TYPES))})"
         )
+    if changes.get("genre") is not None:
+        changes["genre"] = changes["genre"] or None  # "" clears it
+        if changes["genre"] not in (None, "phd", "masters", "bachelors"):
+            raise EditError(
+                f"grado desconocido: {changes['genre']!r} (usa phd, masters o bachelors)"
+            )
     data = paper.model_dump()
     if doi_fields:
         data = fill(data, {k: v for k, v in doi_fields.items() if k in FROM_DOI})

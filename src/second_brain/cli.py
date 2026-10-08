@@ -1681,6 +1681,7 @@ def edit(
     ] = None,
     year: Annotated[int | None, typer.Option(min=1000, max=2100, help="Año.")] = None,
     type_: Annotated[str | None, typer.Option("--type", help="article-journal, thesis, report…")] = None,
+    genre: Annotated[str | None, typer.Option(help="Grado de una tesis: phd, masters o bachelors ('' lo quita).")] = None,
     container: Annotated[str | None, typer.Option(help="Revista, libro o serie.")] = None,
     publisher: Annotated[str | None, typer.Option(help="Editorial o institución (en tesis, la universidad).")] = None,
     volume: Annotated[str | None, typer.Option(help="Volumen.")] = None,
@@ -1699,7 +1700,7 @@ def edit(
 
     lib = Library(_home(ctx))
     _read_paper(lib, citekey)
-    options = {"title": title, "year": year, "type": type_, "container_title": container,
+    options = {"title": title, "year": year, "type": type_, "genre": genre, "container_title": container,
                "publisher": publisher, "volume": volume, "issue": issue, "pages": pages, "doi": doi}  # fmt: skip
     changes = {k: v for k, v in options.items() if v is not None}
     try:

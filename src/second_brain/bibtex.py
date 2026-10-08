@@ -110,12 +110,28 @@ def _pages(pages: str | None) -> str | None:
     return re.sub(r"\s*[-–—]+\s*", "--", pages) if pages else None
 
 
+def _thesis_type(paper: Paper, fmt: Format) -> str | None:
+    """The ``type`` field of a thesis: BibLaTeX's localized keys, or the words for a bachelor's
+    thesis (no entry type has them). A thesis without ``genre`` is exported as a PhD's."""
+    if paper.genre == "bachelors":
+        return (
+            "Tesis de licenciatura"
+            if (paper.language or "").startswith("es")
+            else "Bachelor's thesis"
+        )
+    if fmt == "biblatex":
+        return "mathesis" if paper.genre == "masters" else "phdthesis"
+    return None
+
+
 def entry(paper: Paper, fmt: Format = "bibtex", key: str | None = None) -> str:
     types = BIBTEX_TYPES if fmt == "bibtex" else BIBLATEX_TYPES
     kind = types.get(paper.type, "misc")
     container = encode(paper.container_title, fmt) if paper.container_title else None
     if paper.type == "article" and not container:  # generic CSL "article" (older preprints)
         kind = "misc"
+    if kind == "phdthesis" and paper.genre in ("masters", "bachelors"):
+        kind = "mastersthesis"  # BibTeX has no bachelor's type: @mastersthesis with a "type"
     fields: list[tuple[str, str | None]] = [
         ("author", format_authors(paper, fmt)),
         ("title", protect_title(paper.title, fmt)),
@@ -133,10 +149,9 @@ def entry(paper: Paper, fmt: Format = "bibtex", key: str | None = None) -> str:
         ("pages", _pages(paper.pages)),
     ]
     publisher = encode(paper.publisher, fmt) if paper.publisher else None
-    if kind in ("phdthesis", "thesis"):
+    if kind in ("phdthesis", "mastersthesis", "thesis"):
         fields.append(("school" if fmt == "bibtex" else "institution", publisher))
-        if fmt == "biblatex":
-            fields.append(("type", "phdthesis"))
+        fields.append(("type", _thesis_type(paper, fmt)))
     elif kind in ("techreport", "report"):
         fields.append(("institution", publisher))
         if fmt == "biblatex":

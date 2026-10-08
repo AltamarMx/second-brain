@@ -28,6 +28,7 @@ from .ingest.metadata import (
     datacite_fields,
     fill,
     flags_from_updates,
+    thesis_genre,
 )
 from .library import Library
 from .models import ALIAS_PATTERN, CITEKEY_PATTERN, Paper, Provenance
@@ -140,8 +141,16 @@ def bib_fields(entry: Any) -> dict[str, Any]:
     container = fields.get("journal") or fields.get("journaltitle") or fields.get("booktitle")
     publisher = fields.get("publisher") or fields.get("school") or fields.get("institution")
     keywords = re.split(r"[;,]", decode(fields.get("keywords")) or "")
+    entry_type = entry.entry_type.lower()
+    genre = (
+        thesis_genre(decode(fields.get("type")) or "")
+        or {"phdthesis": "phd", "mastersthesis": "masters"}.get(entry_type)
+        if kind == "thesis"
+        else None
+    )
     return {
         "type": kind,
+        "genre": genre,
         "doi": doi_from_fields(fields),
         "ids": {"isbn": decode(fields.get("isbn"))},
         "title": decode(fields.get("title")) or "(sin título)",

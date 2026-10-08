@@ -26,10 +26,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - `sb process` propone metadatos (autores, título, año, tipo, revista, DOI, ISBN) para los artículos que entraron de un PDF sin DOI; quedan en `suggested` hasta que `sb edit KEY --accept` los aplica.
 - `sb import bib` copia los PDFs del campo `file` de las exportaciones de Zotero, Better BibTeX y JabRef a sus registros, y no asocia los que no muestran el título del registro; `sb ingest PDF --key KEY` asocia un PDF a un artículo concreto.
 - `sb pdf link [CARPETA…]`: coloca en `pdfs/` los PDFs que faltan en esta máquina buscándolos por sha256 (p. ej. en `~/Zotero/storage`), sin mover los originales; `sb pdf open --missing` abre también los procesados sin PDF local.
+- Campo `genre` con el grado de las tesis (`phd`, `masters`, `bachelors`): `sb bib` exporta `@mastersthesis` y las de licenciatura con `type = {Tesis de licenciatura}`; `sb edit --genre`.
 
 ### Cambiado
 
-- Esquema de datos 4: `suggested` y `provenance.metadata` (metadatos propuestos por el LLM). Los archivos anteriores se siguen leyendo; `sb migrate` los actualiza.
+- Esquema de datos 4: `genre` (grado de una tesis), `suggested` y `provenance.metadata` (metadatos propuestos por el LLM). Los archivos anteriores se siguen leyendo; `sb migrate` los actualiza.
 - Esquema de datos 3: `reading`, `rating`, `supplements`, `updates` y `classification.extra`.
 - Esquema de datos 2: `aliases` en los artículos. Los archivos de la versión 1 se siguen leyendo; `sb migrate` los actualiza.
 - BibTeX normaliza letras matemáticas Unicode (𝑪𝑶₂ → CO2).

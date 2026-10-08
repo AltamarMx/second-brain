@@ -193,12 +193,25 @@ METADATA_SCHEMA = {
         },
         "year": {"type": ["integer", "null"]},
         "type": {"anyOf": [{"type": "string", "enum": sorted(BIBLATEX_TYPES)}, {"type": "null"}]},
+        "genre": {
+            "anyOf": [{"type": "string", "enum": ["phd", "masters", "bachelors"]}, {"type": "null"}]
+        },
         "container_title": _TEXT,
         "publisher": _TEXT,
         "doi": _TEXT,
         "isbn": _TEXT,
     },
-    "required": ["title", "authors", "year", "type", "container_title", "publisher", "doi", "isbn"],
+    "required": [
+        "title",
+        "authors",
+        "year",
+        "type",
+        "genre",
+        "container_title",
+        "publisher",
+        "doi",
+        "isbn",
+    ],  # fmt: skip
 }
 
 
@@ -215,6 +228,7 @@ def suggested_metadata(raw: dict[str, Any], today: dt.date) -> SuggestedMetadata
         ],
         year=year if isinstance(year, int) and 1000 <= year <= today.year + 1 else None,
         type=raw.get("type") if raw.get("type") in BIBLATEX_TYPES else None,
+        genre=raw.get("genre") if raw.get("genre") in ("phd", "masters", "bachelors") else None,
         container_title=(raw.get("container_title") or "").strip() or None,
         publisher=(raw.get("publisher") or "").strip() or None,
         doi=normalize_doi(doi.group(0)) if doi else None,

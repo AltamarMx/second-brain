@@ -12,12 +12,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 # 2: Paper.aliases; 3: reading, rating, supplements, updates, classification.extra;
-# 4: suggested, provenance.metadata
+# 4: genre, suggested, provenance.metadata
 SCHEMA_VERSION = 4
 
 CITEKEY_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 SLUG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 
+Genre = Literal["phd", "masters", "bachelors"]
 PaperStatus = Literal["awaiting_pdf", "needs_review", "needs_processing", "processed"]
 PaperFlag = Literal[
     "doi_uncertain",
@@ -127,6 +128,7 @@ class SuggestedMetadata(Model):
     authors: list[Author] = []
     year: int | None = None
     type: str | None = None
+    genre: Genre | None = None
     container_title: str | None = None
     publisher: str | None = None
     doi: str | None = None
@@ -139,6 +141,7 @@ class Paper(Model):
     schema_version: int = SCHEMA_VERSION
     citekey: str = Field(pattern=CITEKEY_PATTERN)
     type: str = "article-journal"
+    genre: Genre | None = None  # degree of a thesis
     doi: str | None = None
     ids: Ids = Ids()
     aliases: list[str] = []  # other keys your .tex files use for this paper (from sb import bib)

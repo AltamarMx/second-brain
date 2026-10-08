@@ -225,3 +225,15 @@ def test_ingest_with_key_attaches_to_that_record(lib, tmp_path):
     lib.write_paper(make_paper("otro2021x", doi=None, title="Otro", status="awaiting_pdf"))
     [taken] = run(lib, FakeServices(), paths=[pdf], key="otro2021x")
     assert taken.outcome == "error" and "ya es de informe2020x" in taken.message
+
+
+def test_import_thesis_degree(lib, tmp_path):
+    bib = write_bib(tmp_path, r"""
+@mastersthesis{lopez2016universidad, author = {L{\'o}pez, Ana}, title = {Universidad y energía},
+  school = {UNAM}, year = {2016}}
+@phdthesis{tizacio2010x, author = {Tizacio, Juan}, title = {Vivienda}, school = {UAEM},
+  year = {2010}, type = {Tesis de licenciatura}}
+""")  # fmt: skip
+    import_bib(lib, client(lib), bib, today=dt.date(2026, 10, 4))
+    assert lib.read_paper("lopez2016universidad").meta.genre == "masters"
+    assert lib.read_paper("tizacio2010x").meta.genre == "bachelors"

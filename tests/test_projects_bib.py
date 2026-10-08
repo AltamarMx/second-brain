@@ -273,3 +273,30 @@ def test_lowercase_names_from_crossref_are_capitalized():
         ("Liu", "Yongping"), ("de la Cruz-García", "J. A."), ("McDonald", "IPCC"),
     ]  # fmt: skip
     assert name_case("o'brien") == "O'Brien" and name_case(None) is None
+
+
+def test_thesis_degree():
+    from second_brain.ingest.metadata import crossref_fields, thesis_genre
+
+    assert thesis_genre("Tesis de Licenciatura en Arquitectura") == "bachelors"
+    assert thesis_genre("Tesis que para obtener el grado de Maestra en Ingeniería") == "masters"
+    assert thesis_genre("Doctor of Philosophy") == "phd" and thesis_genre("Informe") is None
+    fields = crossref_fields(
+        {"type": "dissertation", "title": ["T"], "degree": ["Master of Science (MSc)"]}
+    )
+    assert (fields["type"], fields["genre"]) == ("thesis", "masters")
+    cases = {
+        None: ("@phdthesis{", None, "phdthesis"),
+        "phd": ("@phdthesis{", None, "phdthesis"),
+        "masters": ("@mastersthesis{", None, "mathesis"),
+        "bachelors": ("@mastersthesis{", "Tesis de licenciatura", "Tesis de licenciatura"),
+    }
+    for genre, (bibtex_kind, bibtex_type, biblatex_type) in cases.items():
+        paper = make_paper(type="thesis", genre=genre, publisher="UNAM", language="es")
+        text = bibtex.entry(paper, "bibtex")
+        assert text.startswith(bibtex_kind) and "school = {UNAM}" in text
+        assert (f"type = {{{bibtex_type}}}" in text) if bibtex_type else ("type =" not in text)
+        text = bibtex.entry(paper, "biblatex")
+        assert text.startswith("@thesis{") and f"type = {{{biblatex_type}}}" in text
+    english = make_paper(type="thesis", genre="bachelors", language="en")
+    assert "type = {Bachelor's thesis}" in bibtex.entry(english)
