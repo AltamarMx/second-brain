@@ -264,3 +264,30 @@ def test_challenge_page_with_200_is_blocked(tmp_path):
     with pytest.raises(FetchFailure) as info:
         Fetcher(ACCESS, None, client=client, sleep=lambda s: None).fetch(DOI, tmp_path / "o.pdf")
     assert info.value.reason == "blocked"
+
+
+def test_unreachable_publisher_is_not_reported_as_offline(tmp_path):
+    web = FakeWeb(tmp_path)
+
+    def slow_publisher(request):
+        if request.url.host == "publisher.example":
+            raise httpx.ReadTimeout("timed out", request=request)
+        return web(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(slow_publisher), follow_redirects=True)
+    fetcher = Fetcher(ACCESS, None, client=client, sleep=lambda s: None)
+    fetcher.inside_institution = lambda refresh=False: True
+    with pytest.raises(FetchFailure) as info:
+        fetcher.fetch(DOI, tmp_path / "o.pdf")
+    assert info.value.reason == "unreachable"
+    assert "publisher.example no respondió" in str(info.value) and "doi.org" not in str(info.value)
+
+    def offline(request):
+        raise httpx.ConnectError("sin red", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(offline), follow_redirects=True)
+    fetcher = Fetcher(ACCESS, None, client=client, sleep=lambda s: None)
+    fetcher.inside_institution = lambda refresh=False: True
+    with pytest.raises(FetchFailure) as info:
+        fetcher.fetch(DOI, tmp_path / "o.pdf")
+    assert info.value.reason == "offline" and "doi.org" in str(info.value)

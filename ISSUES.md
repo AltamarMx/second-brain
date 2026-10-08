@@ -16,7 +16,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 10 | media | Los preprints salen como `@article` sin revista | ✅ resuelto |
 | 11 | media | Nombres en minúsculas desde Crossref | ✅ resuelto |
 | 12 | media | Lo que viene de Zotero pierde sus metadatos y PDFs | ✅ resuelto |
-| 13 | media | Mensaje de error de descarga engañoso | pendiente |
+| 13 | media | Mensaje de error de descarga engañoso | ✅ resuelto |
 | 14 | media | `sb pdf get --json` informa un estado que no es el del registro | pendiente |
 | 15 | media | No hay forma de completar los PDFs locales desde una carpeta | pendiente |
 | 16 | baja | El grado de las tesis no se distingue | pendiente |
@@ -123,6 +123,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Dónde:** `fetch/download.py`.
 - **Evidencia:** para `huelszlesbros2022importance`, `sb` dice "sin conexión con doi.org: timed out". Pero doi.org responde con un 302 en 0.16 s; el que no responde es revistaingenieria.unam.mx.
 - **Propuesta:** informar el servidor de la petición que falló, no el de la primera petición.
+- **Resolución:** El mensaje usa el servidor de la petición que falló (`exc.request`, después de las redirecciones), no el de la primera. Si doi.org redirigió bien y lo que no responde es la editorial, el motivo es el nuevo `unreachable` ("revistaingenieria.unam.mx no respondió (ReadTimeout); reintenta más tarde o ábrelo con sb pdf open") y el artículo queda esperando PDF, en lugar de abortar como "sin conexión". Los enlaces fallidos dicen su servidor y el tipo de error.
 
 ### 14. `sb pdf get --json` informa un estado que no es el del registro
 

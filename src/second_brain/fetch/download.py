@@ -23,7 +23,9 @@ from .. import __version__
 from ..config import AccessSection
 from .network import in_ranges, public_ip
 
-Reason = Literal["needs_vpn", "access_denied", "blocked", "no_pdf_link", "limit", "offline"]
+Reason = Literal[
+    "needs_vpn", "access_denied", "blocked", "no_pdf_link", "limit", "offline", "unreachable"
+]  # fmt: skip
 Source = Literal["openaccess", "institutional"]
 
 USER_AGENT = f"Mozilla/5.0 (compatible; second-brain/{__version__}; +https://github.com/AltamarMx/second-brain)"
@@ -38,6 +40,14 @@ PAYWALL_MARKERS = (
     "purchase", "subscribe", "buy article", "rent this article", "get access",
     "access through your institution", "institutional access",
 )  # fmt: skip
+
+
+def _failed_host(exc: httpx.HTTPError) -> str | None:
+    """The server of the request that failed (after redirects), not of the first one."""
+    try:
+        return exc.request.url.host
+    except RuntimeError:  # an error raised without a request
+        return None
 
 
 class FetchFailure(RuntimeError):
@@ -161,12 +171,18 @@ class Fetcher:
 
     def _get_page(self, url: str) -> httpx.Response:
         self._pace()
+        first = urllib.parse.urlsplit(url).netloc
         try:
             return self.client.get(url)
         except httpx.HTTPError as exc:
-            raise FetchFailure(
-                "offline", f"sin conexión con {urllib.parse.urlsplit(url).netloc}: {exc}"
-            ) from exc
+            failed = _failed_host(exc) or first
+            if failed != first:  # doi.org redirected fine: the network works, that server does not
+                raise FetchFailure(
+                    "unreachable",
+                    f"{failed} no respondió ({type(exc).__name__}); reintenta más tarde o ábrelo "
+                    "con sb pdf open",
+                ) from exc
+            raise FetchFailure("offline", f"sin conexión con {failed}: {exc}") from exc
 
     def _download(self, url: str, via: str, dest: Path, publisher: bool) -> _Attempt | None:
         """Save ``url`` to ``dest`` if it is a PDF; return the failed attempt otherwise."""
@@ -209,7 +225,8 @@ class Fetcher:
                         break
                 text = body.decode("utf-8", "ignore").lower()
         except httpx.HTTPError as exc:
-            return _Attempt(url, via, "error", str(exc))
+            host = _failed_host(exc) or urllib.parse.urlsplit(url).netloc
+            return _Attempt(url, via, "error", f"{host}: {type(exc).__name__}")
         if any(marker in text for marker in BLOCK_MARKERS):
             return _Attempt(url, via, "blocked", f"HTTP {response.status_code}")
         if response.status_code in (401, 402, 403) or any(
@@ -315,5 +332,7 @@ class Fetcher:
         return FetchFailure(
             "no_pdf_link",
             "los enlaces al PDF no funcionaron: "
-            + "; ".join(f"{a.via}: {a.outcome}" for a in attempts),
+            + "; ".join(
+                f"{a.via}: {a.outcome}" + (f" ({a.detail})" if a.detail else "") for a in attempts
+            ),
         )

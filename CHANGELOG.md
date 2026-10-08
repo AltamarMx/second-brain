@@ -44,3 +44,4 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - `sb import bib` ya no borra campos del .bib cuando Crossref no los trae; `--prefer-bib` hace que ganen los del .bib y Crossref solo llene huecos.
 - Los preprints (Crossref `posted-content`) tienen el tipo `preprint` y se exportan como `@misc` con su servidor (`howpublished = {SSRN}`) en lugar de `@article` sin revista.
 - Los nombres de autor que Crossref o DataCite dan en minúsculas se capitalizan ("liu, yongping" → "Liu, Yongping").
+- Una descarga que falla porque la editorial no responde ya no dice "sin conexión con doi.org": nombra el servidor que falló y deja el artículo esperando PDF en lugar de abortar como si no hubiera red.
