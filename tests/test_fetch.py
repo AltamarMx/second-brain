@@ -202,6 +202,18 @@ def test_failed_download_registers_awaiting_then_retry(lib, tmp_path):
     assert DOI not in json.loads((lib.cache_dir / "fetch.json").read_text())
 
 
+def test_failed_download_reports_the_records_real_status(lib, tmp_path):
+    from conftest import make_paper
+
+    from second_brain.models import PdfInfo
+
+    pdf = PdfInfo(sha256="c" * 64, pages=3, size_bytes=10, source="inbox")
+    lib.write_paper(make_paper("garcia2021thermal", doi=DOI, status="processed", pdf=pdf))
+    [result] = ingestor_for(lib, FakeWeb(tmp_path, pdf_response="denied")).run([], [DOI])
+    assert (result.outcome, result.status) == ("awaiting", "processed")  # not awaiting_pdf
+    assert lib.read_paper("garcia2021thermal").meta.status == "processed"
+
+
 def test_awaiting_record_gets_pdf_dropped_in_inbox(lib, tmp_path):
     web = FakeWeb(tmp_path, pdf_response="blocked")
     [first] = ingestor_for(lib, web).run([], [DOI])

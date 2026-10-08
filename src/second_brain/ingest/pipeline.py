@@ -610,6 +610,7 @@ class Ingestor:
             if existing:
                 result.citekey = existing
                 paper = self.index.papers[existing]
+                result.status = paper.status  # a failed download does not change the record
                 if paper.pdf is not None and (self.lib.pdfs_dir / f"{existing}.pdf").exists():
                     result.outcome = "duplicate"
                     result.message = f"ya está en la biblioteca como {existing}"
@@ -638,7 +639,7 @@ class Ingestor:
         if self.fetcher is None:
             raise IngestError("la descarga de PDFs no está disponible")
         if self.options.dry_run:
-            result.outcome, result.status = "awaiting", "awaiting_pdf"
+            result.outcome, result.status = "awaiting", result.status or "awaiting_pdf"
             result.message = "(simulación) se intentaría descargar el PDF"
             return result
         dest = self.lib.inbox_dir / f"doi-{re.sub(r'[^a-z0-9.-]+', '_', doi)}.pdf"
@@ -648,7 +649,7 @@ class Ingestor:
             if failure.reason == "offline":
                 raise NetworkError(str(failure)) from failure
             self._log_fetch(doi, failure.reason, str(failure))
-            result.outcome, result.status = "awaiting", "awaiting_pdf"
+            result.outcome, result.status = "awaiting", result.status or "awaiting_pdf"
             result.message = f"sin PDF: {failure}"
             return result
         self._log_fetch(doi, None, None)

@@ -17,7 +17,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 11 | media | Nombres en minúsculas desde Crossref | ✅ resuelto |
 | 12 | media | Lo que viene de Zotero pierde sus metadatos y PDFs | ✅ resuelto |
 | 13 | media | Mensaje de error de descarga engañoso | ✅ resuelto |
-| 14 | media | `sb pdf get --json` informa un estado que no es el del registro | pendiente |
+| 14 | media | `sb pdf get --json` informa un estado que no es el del registro | ✅ resuelto |
 | 15 | media | No hay forma de completar los PDFs locales desde una carpeta | pendiente |
 | 16 | baja | El grado de las tesis no se distingue | pendiente |
 | 17 | baja | Se pierde el subíndice de CO₂ en BibTeX | pendiente |
@@ -128,6 +128,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 ### 14. `sb pdf get --json` informa un estado que no es el del registro
 
 - **Evidencia:** devuelve `"status": "awaiting_pdf"` para 11 artículos que en realidad siguen como `processed`. Un agente puede malinterpretarlo.
+- **Resolución:** Cuando el DOI ya es de un registro, el resultado lleva el `status` real del registro (`processed`, `needs_processing`…); `awaiting_pdf` queda solo para registros nuevos sin PDF. Una descarga fallida nunca cambia el registro.
 
 ### 15. No hay forma de completar los PDFs locales a partir de una carpeta
 
