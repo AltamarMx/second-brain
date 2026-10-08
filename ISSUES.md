@@ -10,7 +10,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 4 | media | Nunca se extraen los autores de PDFs sin DOI | ✅ resuelto |
 | 5 | media | El año sale de cualquier número de 4 cifras | ✅ resuelto |
 | 6 | media | El título se toma de la letra más grande de la p. 1 | ✅ resuelto |
-| 7 | media | Caracteres de fuentes matemáticas (CO₂ → "CCCC") | pendiente |
+| 7 | media | Caracteres de fuentes matemáticas (CO₂ → "CCCC") | ✅ resuelto |
 | 8 | media | No se aprovechan identificadores de la página (SSRN) | pendiente |
 | 9 | media | Con DOI, Crossref sustituye todo el .bib, incluso con vacíos | pendiente |
 | 10 | media | Los preprints salen como `@article` sin revista | pendiente |
@@ -79,6 +79,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 ### 7. Caracteres de fuentes matemáticas
 
 - **Evidencia:** el PDF de `ramirezzuniga2025diseno` escribe CO₂ con una fuente matemática y el título salió como "MONITOR DE CCCC". El texto completo también quedó dañado en esa parte.
+- **Resolución:** Causa: Word escribe las ecuaciones (CO₂ como fórmula, fuente CambriaMath) con un ToUnicode roto: cada glifo mapea a su carácter dos veces y la O recibe el carácter de la C (`<0725>` y `<0731>` → 𝐶𝐶). `repair_math_tounicode` lo corrige en memoria antes de extraer: quita el duplicado y deduce el carácter de cada glifo por su distancia en gid al bien mapeado (los alfabetos matemáticos son contiguos en la fuente; si hay ambigüedad, el primero usado). `plain_math` pasa 𝑪𝑶𝟐 a CO2 en el texto. Con el PDF real, el título sale "…MONITOR DE CO2 PARA LA CALIDAD…". Limitación: pymupdf4llm a veces coloca la fórmula en otra línea del texto completo.
 
 ### 8. No se aprovechan identificadores que vienen en la página
 

@@ -167,6 +167,95 @@ def _title_guess(doc: pymupdf.Document, metadata_title: str | None, front_text: 
     return metadata_title[:400] if reasonable else None
 
 
+BFCHAR_RE = re.compile(rb"<([0-9A-Fa-f]+)>(\s*)<([0-9A-Fa-f]+)>")
+MATH_ALNUM_RE = re.compile("[\U0001d400-\U0001d7ff]")
+
+
+def _math_alphabet(cp: int) -> range | None:
+    """The alphabet (A–Z, a–z or 0–9 of one style) of a mathematical alphanumeric symbol."""
+    if 0x1D400 <= cp <= 0x1D6A3:  # 13 styles × (26 capitals + 26 small letters)
+        start = cp - (cp - 0x1D400) % 26
+        return range(start, start + 26)
+    if 0x1D7CE <= cp <= 0x1D7FF:  # 5 styles × 10 digits
+        start = cp - (cp - 0x1D7CE) % 10
+        return range(start, start + 10)
+    return None
+
+
+def _first_use(doc: pymupdf.Document, font: str) -> dict[int, int]:
+    """Glyph id → order of its first appearance in the document, for one font."""
+    order: dict[int, int] = {}
+    for page in doc:
+        for span in page.get_texttrace():
+            if span["font"] == font:
+                for char in span["chars"]:
+                    order.setdefault(char[1], len(order))
+    return order
+
+
+def repair_math_tounicode(doc: pymupdf.Document) -> int:
+    """Word writes equations (CO₂ typed as math) with a broken ToUnicode map: every glyph
+    maps to its character twice, and the glyphs of a run share one character (C and O →
+    "𝑪𝑪𝑪𝑪"). Fix the map in memory: undouble it and, where glyphs collide, infer each one's
+    character from its glyph-id distance to the glyph that is mapped right (the first one
+    used), since math alphabets are contiguous in the font. Returns the fonts repaired."""
+    repaired, seen = 0, set()
+    for page in doc:
+        for xref, _ext, kind, basefont, *_ in page.get_fonts(full=True):
+            if xref in seen or kind != "Type0":
+                continue
+            seen.add(xref)
+            match = re.search(r"/ToUnicode (\d+) 0 R", doc.xref_object(xref))
+            if not match:
+                continue
+            cmap_xref = int(match.group(1))
+            cmap = doc.xref_stream(cmap_xref) or b""
+            mapped: dict[int, str] = {}
+            for gid, _, value in BFCHAR_RE.findall(cmap):
+                mapped[int(gid, 16)] = bytes.fromhex(value.decode()).decode("utf-16-be", "ignore")
+            fixed: dict[int, str] = {}
+            for gid, text in mapped.items():
+                if len(text) == 2 and text[0] == text[1] and _math_alphabet(ord(text[0])):
+                    fixed[gid] = text[0]
+            groups: dict[str, list[int]] = {}
+            for gid in fixed:
+                groups.setdefault(fixed[gid], []).append(gid)
+            order: dict[int, int] | None = None
+            for char, gids in groups.items():
+                if len(gids) < 2:
+                    continue
+                alphabet = _math_alphabet(ord(char))
+                valid = [r for r in gids if all(ord(char) + g - r in alphabet for g in gids)]
+                if len(valid) > 1:
+                    if order is None:
+                        order = _first_use(doc, basefont.split("+")[-1])
+                    valid = sorted(valid, key=lambda g: order.get(g, len(order)))[:1]
+                if len(valid) == 1:
+                    for gid in gids:
+                        fixed[gid] = chr(ord(char) + gid - valid[0])
+            if not fixed:
+                continue
+
+            def rewrite(m: re.Match[bytes], fixed: dict[int, str] = fixed) -> bytes:
+                text = fixed.get(int(m.group(1), 16))
+                if text is None:
+                    return m.group(0)
+                return b"<%s>%s<%s>" % (
+                    m.group(1),
+                    m.group(2),
+                    text.encode("utf-16-be").hex().upper().encode(),
+                )
+
+            doc.update_stream(cmap_xref, BFCHAR_RE.sub(rewrite, cmap))
+            repaired += 1
+    return repaired
+
+
+def plain_math(text: str) -> str:
+    """Mathematical letters and digits (𝑪𝑶𝟐) as plain ones (CO2), for search and titles."""
+    return MATH_ALNUM_RE.sub(lambda m: unicodedata.normalize("NFKC", m.group(0)), text)
+
+
 def _ocr_pages(doc: pymupdf.Document, languages: list[str]) -> list[str]:
     available = installed_ocr_languages()
     usable = [lang for lang in languages if lang in available] or ["eng"]
@@ -177,11 +266,26 @@ def _ocr_pages(doc: pymupdf.Document, languages: list[str]) -> list[str]:
     return pages
 
 
-def extract(path: Path, ocr_languages: list[str] | None = None) -> Extraction:
+def _open(path: Path) -> pymupdf.Document:
     try:
         doc = pymupdf.open(path)
     except Exception as exc:
         raise ExtractionError(f"no se pudo abrir el PDF: {exc}") from exc
+    if doc.needs_pass or not doc.page_count:
+        return doc
+    try:
+        repaired = repair_math_tounicode(doc)
+    except Exception:  # an odd font table must never stop the extraction
+        repaired = 0
+    if not repaired:
+        return doc
+    fixed = pymupdf.open(stream=doc.tobytes(), filetype="pdf")  # MuPDF caches the old map
+    doc.close()
+    return fixed
+
+
+def extract(path: Path, ocr_languages: list[str] | None = None) -> Extraction:
+    doc = _open(path)
     with doc:
         if doc.needs_pass:
             raise ExtractionError("el PDF está protegido con contraseña")
@@ -192,7 +296,7 @@ def extract(path: Path, ocr_languages: list[str] | None = None) -> Extraction:
         metadata_text = (
             " ".join(str(v) for v in info.values() if v) + " " + (doc.get_xml_metadata() or "")
         )
-        plain = [page.get_text() for page in doc]
+        plain = [plain_math(page.get_text()) for page in doc]
         has_images = any(page.get_images() for page in doc)
         chars = sum(len(t.strip()) for t in plain)
         scanned = has_images and chars < MIN_CHARS_PER_PAGE * doc.page_count
@@ -205,7 +309,7 @@ def extract(path: Path, ocr_languages: list[str] | None = None) -> Extraction:
             plain = pages
         else:
             chunks = pymupdf4llm.to_markdown(doc, page_chunks=True, show_progress=False)
-            pages = [chunk["text"] for chunk in chunks]
+            pages = [plain_math(chunk["text"]) for chunk in chunks]
             if len(pages) != doc.page_count:
                 raise ExtractionError(
                     f"el extractor devolvió {len(pages)} páginas de {doc.page_count}"
