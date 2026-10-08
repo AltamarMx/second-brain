@@ -40,6 +40,7 @@ Se llaman con `uv run sb …`; los que muestran datos aceptan `--json`.
 - `sb list`: artículos con filtros, sin tema; `--status needs_review`, `--reading`. Para contar.
 - `sb ask "pregunta"`: respuesta con citas sin abrir chat; `--paper KEY`, `-p SLUG`.
 - `sb read KEY`: estado de lectura y calificación; `--status leyendo`, `--rating 4`.
+- `sb edit KEY`: corrige metadatos sin tocar texto, resumen ni proyectos; `--author`, `--title`, `--year`, `--from-doi DOI`, `--rekey`.
 - `sb refs [KEY]`: citas dentro de la biblioteca; `--missing` (obras que te faltan), `--html` (grafo).
 - `sb attach KEY PDF`: agrega material suplementario buscable; `--label`.
 - `sb remove KEY`: elimina un artículo (ver abajo); `--yes` sin confirmación.
@@ -71,7 +72,7 @@ Opciones completas: `uv run sb <comando> --help`.
 
 ## Comportamientos que conviene saber
 
-- El citekey (`{apellido}{año}{palabra}`; `anon` = sin autor, `nd` = sin año) se asigna una vez y nunca cambia. No hay comando para corregir metadatos sin DOI: se borra el artículo y se recrea (skill `sb-ingerir`).
+- El citekey (`{apellido}{año}{palabra}`; `anon` = sin autor, `nd` = sin año) se asigna al ingerir y no cambia solo. `sb edit KEY --rekey` lo regenera desde los metadatos corregidos y deja el anterior en `aliases`: `sb bib` exporta ambos, así que los .tex no se rompen. `sb edit` saca al artículo de `needs_review`.
 - `sb remove` borra registro, texto completo, figuras y textos de suplementos; conserva las notas y mueve el PDF local a `inbox/_eliminados/`. Se pierden proyectos, estado de lectura y calificación: anótalos antes.
 - Un PDF se asocia a un registro existente por sha256, por DOI o, si el registro aún no tiene PDF, por título parecido (similitud ≥ 93 y año ±1). Si el título extraído del PDF es malo, no se asocia y se crea un registro nuevo.
 - `sb ingest PDF --doi DOI` valida el artículo aunque el título del DOI no esté en la página 1 (solo agrega el flag `metadata_mismatch`). En cambio, un PDF que `sb ingest DOI` descarga para un DOI nuevo queda en `needs_review` en ese caso (p. ej. manuscritos con líneas numeradas).

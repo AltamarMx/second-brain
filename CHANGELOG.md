@@ -22,6 +22,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - `sb refs --html`: línea de tiempo por año de publicación (▶ y control deslizante); los artículos sin `year` quedan fijos y marcados como pendientes, y `sb refs --html` los lista.
 - `AGENTS.md` de la biblioteca: lista de comandos (un test exige que estén todos los de la CLI) y comportamientos no obvios; la skill `sb-ingerir` explica cómo resolver `needs_review`.
 - `sb ingest --all [--push]`: ingerir, procesar todo lo pendiente, validar y hacer commit en un solo paso.
+- `sb edit KEY`: corrige metadatos (a mano o con `--from-doi`, que solo aplica lo que Crossref trae) sin tocar texto, resumen, proyectos ni lectura, y saca al artículo de `needs_review`; `--rekey`/`--key` cambian el citekey y dejan el anterior como alias.
 
 ### Cambiado
 

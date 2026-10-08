@@ -162,6 +162,21 @@ def crossref_fields(message: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+EMPTY = (None, "", [], {}, "(sin título)")
+
+
+def fill(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
+    """``base`` with the values of ``extra`` that say something: an incomplete Crossref record
+    (no authors, no pages…) never erases data that was already there."""
+    merged = dict(base)
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = fill(merged[key], value)
+        elif value not in EMPTY:
+            merged[key] = value
+    return merged
+
+
 RETRACTING = {"retraction", "withdrawal", "removal", "partial_retraction"}
 
 

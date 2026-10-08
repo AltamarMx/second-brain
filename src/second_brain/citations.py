@@ -173,7 +173,7 @@ if (pending.length) {{
   const box = document.getElementById("pending");
   box.hidden = false;
   box.querySelector("summary").textContent = `⚠ ${{pending.length}} sin año: siempre visibles en la ` +
-    "animación hasta que alguien complete year en su ficha";
+    "animación hasta que se complete con sb edit KEY --year AAAA";
   for (const node of pending) {{
     const button = document.createElement("button");
     button.textContent = node.id;
@@ -209,7 +209,7 @@ def graph_html(graph: Graph, papers: Mapping[str, Paper], min_count: int = 2) ->
         node = {"id": key, "label": key, "title": f"{paper.title} ({paper.year})",
                 "value": 1 + cited, "color": "#3b7dd8", "kind": "paper", "year": paper.year}  # fmt: skip
         if paper.year is None:
-            node |= {"title": f"{paper.title}\nAño pendiente: falta year en su ficha",
+            node |= {"title": f"{paper.title}\nAño pendiente: sb edit {key} --year AAAA",
                      "pending": True, "color": {**PENDING_COLOR, "highlight": PENDING_COLOR},
                      "borderWidth": 3, "shapeProperties": {"borderDashes": [4, 3]}}  # fmt: skip
         nodes.append(node)

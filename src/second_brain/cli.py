@@ -29,7 +29,7 @@ from .doctor import library_status, run_doctor
 from .fetch.download import Fetcher
 from .index import Filters, Mode, SearchIndex, open_index
 from .ingest.doi import DOI_RE, normalize_doi
-from .ingest.metadata import MetadataClient
+from .ingest.metadata import MetadataClient, NetworkError
 from .ingest.pipeline import IngestError, IngestOptions, Ingestor, IngestResult, LockedError
 from .library import InvalidDocument, Library
 from .machines import Agent, Backend, detect_machine_name, load_profile, profile_path
@@ -1577,6 +1577,76 @@ def read(
 
 
 @app.command()
+def edit(
+    ctx: typer.Context,
+    citekey: Annotated[str, typer.Argument(help="Artículo.")],
+    title: Annotated[str | None, typer.Option(help="Título.")] = None,
+    author: Annotated[
+        list[str] | None,
+        typer.Option(help="'Apellido, Nombre'; repetible, sustituye la lista. Sin coma: organización."),
+    ] = None,
+    year: Annotated[int | None, typer.Option(min=1000, max=2100, help="Año.")] = None,
+    type_: Annotated[str | None, typer.Option("--type", help="article-journal, thesis, report…")] = None,
+    container: Annotated[str | None, typer.Option(help="Revista, libro o serie.")] = None,
+    publisher: Annotated[str | None, typer.Option(help="Editorial o institución (en tesis, la universidad).")] = None,
+    volume: Annotated[str | None, typer.Option(help="Volumen.")] = None,
+    issue: Annotated[str | None, typer.Option(help="Número.")] = None,
+    pages: Annotated[str | None, typer.Option(help="Páginas.")] = None,
+    doi: Annotated[str | None, typer.Option(help="DOI ('' lo quita). No consulta Crossref.")] = None,
+    from_doi: Annotated[str | None, typer.Option("--from-doi", help="Traer los metadatos de este DOI (Crossref/DataCite).")] = None,
+    rekey: Annotated[bool, typer.Option("--rekey", help="Nuevo citekey según los metadatos; el anterior queda como alias.")] = False,
+    key: Annotated[str | None, typer.Option("--key", help="Nuevo citekey elegido (implica --rekey).")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Mostrar qué cambiaría sin escribir.")] = False,
+    as_json: JsonOpt = False,
+) -> None:  # fmt: skip
+    """Corrige los metadatos de un artículo (y, si quieres, su citekey) sin tocar texto, resumen ni proyectos."""
+    from .edit import EditError, edit_paper, lookup_doi, parse_author
+
+    lib = Library(_home(ctx))
+    _read_paper(lib, citekey)
+    options = {"title": title, "year": year, "type": type_, "container_title": container,
+               "publisher": publisher, "volume": volume, "issue": issue, "pages": pages, "doi": doi}  # fmt: skip
+    changes = {k: v for k, v in options.items() if v is not None}
+    try:
+        if author:
+            changes["authors"] = [parse_author(a) for a in author]
+        doi_fields, source = None, "manual"
+        if from_doi:
+            client = MetadataClient(lib.cache_dir, email=load_config(lib.home).user.email)
+            doi_fields, source = lookup_doi(client, normalize_doi(from_doi))
+            doi_fields["doi"] = normalize_doi(from_doi)
+        result = edit_paper(
+            lib, citekey, changes, doi_fields=doi_fields, source=source,
+            rekey=rekey, new_key=key, dry_run=dry_run,
+        )  # fmt: skip
+    except (EditError, NetworkError) as exc:
+        console.print(f"[red]✗[/] {escape(str(exc))}")
+        raise typer.Exit(1) from exc
+    if as_json:
+        print(json.dumps(dataclasses.asdict(result), ensure_ascii=False, indent=2))
+        return
+    prefix = "(simulación) " if dry_run else ""
+    if not (result.changed or result.reviewed or result.old_citekey):
+        console.print(f"{citekey}: nada que cambiar.")
+        return
+    if result.changed:
+        console.print(f"[green]✓[/] {prefix}{citekey}: {', '.join(result.changed)}")
+    if result.reviewed:
+        console.print(f"[green]✓[/] {prefix}{citekey}: revisado, deja needs_review")
+    if result.old_citekey:
+        console.print(
+            f"[green]✓[/] {prefix}citekey {result.old_citekey} → [bold]{result.citekey}[/] "
+            f"({result.old_citekey} queda como alias; sb bib lo sigue exportando)"
+        )
+        for src, dest in result.renamed:
+            console.print(f"    [dim]{src} → {dest}[/]")
+        console.print(
+            f"[dim]En tus otras computadoras el PDF local sigue como pdfs/{result.old_citekey}.pdf: "
+            f"renómbralo a pdfs/{result.citekey}.pdf.[/]"
+        )
+
+
+@app.command()
 def attach(
     ctx: typer.Context,
     citekey: Annotated[str, typer.Argument(help="Artículo.")],
@@ -1641,8 +1711,7 @@ def refs(
             shown = ", ".join(undated[:10]) + (" …" if len(undated) > 10 else "")
             console.print(
                 f"[yellow]![/] {len(undated)} sin año (fijos en la animación, marcados como "
-                f"pendientes): {shown}\n    [dim]Complétalo con year: en "
-                f"{lib.papers_dir.relative_to(lib.home)}/KEY.md[/]"
+                f"pendientes): {shown}\n    [dim]Complétalo con: sb edit KEY --year AAAA[/]"
             )
         if open_browser:
             webbrowser.open(out.resolve().as_uri())

@@ -6,7 +6,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 |---|---|---|---|
 | 1 | alta | `sb ingest RUTA` borra el original fuera de `inbox/` | ✅ resuelto |
 | 2 | alta | Un PDF de otra versión impide colocar después el original | ✅ resuelto |
-| 3 | alta | No hay forma de corregir metadatos sin DOI | pendiente |
+| 3 | alta | No hay forma de corregir metadatos sin DOI | ✅ resuelto |
 | 4 | media | Nunca se extraen los autores de PDFs sin DOI | pendiente |
 | 5 | media | El año sale de cualquier número de 4 cifras | pendiente |
 | 6 | media | El título se toma de la letra más grande de la p. 1 | pendiente |
@@ -46,6 +46,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Qué pasa:** el único camino es `sb remove`, luego `sb import bib` y luego `sb ingest`. Se pierden el resumen (hay que reprocesar), los proyectos y el estado de lectura.
 - **Bloqueo:** el PDF solo vuelve a su registro si el título extraído tiene un parecido de al menos 93. En 3 de los 14 pendientes es imposible: `anon2025bim` da 84.6, `anon2024sin` 18.0 y `anon2022climate` 27.9.
 - **Propuesta:** `sb edit KEY --author/--title/--year/--type/--container/--publisher/--genre`, que reescriba el registro sin tocar el texto completo, el resumen ni los proyectos; `--rekey` para cambiar el citekey y guardar el anterior en `aliases`.
+- **Resolución:** `sb edit KEY` (`--author`, `--title`, `--year`, `--type`, `--container`, `--publisher`, `--volume`, `--issue`, `--pages`, `--doi`, `--from-doi`, `--dry-run`) reescribe solo el registro y saca al artículo de `needs_review`; como el PDF nunca se separa, desaparece el bloqueo del 93. `--rekey`/`--key` renombran todos los archivos y dejan el citekey anterior en `aliases`. `--genre` llega con el #16.
 
 ## Prioridad media: metadatos de PDFs sin DOI (de aquí salen los 15 `anon…`)
 
