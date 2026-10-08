@@ -400,6 +400,9 @@ def ingest(
         bool, typer.Option(help="Reintentar la descarga de los que esperan PDF.")
     ] = False,
     doi: Annotated[str | None, typer.Option(help="Forzar el DOI (solo con un PDF).")] = None,
+    key: Annotated[
+        str | None, typer.Option("--key", help="Asociar el PDF a este artículo (solo con un PDF).")
+    ] = None,
     project: Annotated[
         str | None, typer.Option(help="Asignar lo ingerido a un proyecto existente.")
     ] = None,
@@ -437,7 +440,7 @@ def ingest(
     if dois is not None:
         lines = dois.expanduser().read_text(encoding="utf-8").splitlines()
         wanted += [line.strip() for line in lines if line.strip() and not line.startswith("#")]
-    options = IngestOptions(dry_run=dry_run, forced_doi=doi, project=project)
+    options = IngestOptions(dry_run=dry_run, forced_doi=doi, key=key, project=project)
     ingestor = _ingestor(lib, options, interactive=sys.stdin.isatty() and not as_json)
     if retry:
         wanted += ingestor.pending_dois()
@@ -1349,14 +1352,30 @@ def import_bib_command(
             target = f" → [bold]{r.citekey}[/]" if r.citekey and r.citekey != r.key else ""
             note = f"  [dim]{escape(r.message)}[/]" if r.message else ""
             console.print(f"{mark} {escape(r.key)}{target}{note}")
+            if r.pdf and dry_run:
+                console.print(f"    [dim]PDF: {escape(r.pdf)}[/]")
+            elif r.pdf_outcome in ("attached", "relinked"):
+                console.print(f"    [green]PDF copiado[/] [dim]{escape(r.pdf or '')}[/]")
+            elif r.pdf_outcome == "error":
+                console.print(f"    [yellow]PDF no asociado[/] [dim]{escape(r.pdf or '')}[/]")
         counts = {o: sum(1 for r in results if r.outcome == o) for o in IMPORT_LABEL}
         summary = " · ".join(f"{n} {IMPORT_LABEL[o][1]}" for o, n in counts.items() if n)
         console.print(
             f"\n{'(simulación) ' if dry_run else ''}{summary or 'el .bib no tiene entradas'}"
         )
-        if counts["imported"] and not dry_run:
+        attached = sum(1 for r in results if r.pdf_outcome in ("attached", "relinked"))
+        if attached:
             console.print(
-                "[dim]Ahora suelta sus PDFs en inbox/ y ejecuta sb ingest: cada uno se asocia a su registro.[/]"
+                f"{attached} PDFs copiados del .bib; procésalos con sb process --pending."
+            )
+        waiting = sum(
+            1
+            for r in results
+            if r.outcome == "imported" and r.pdf_outcome not in ("attached", "relinked")
+        )
+        if waiting and not dry_run:
+            console.print(
+                "[dim]Para los que no traían PDF: suéltalos en inbox/ y ejecuta sb ingest; cada uno se asocia a su registro.[/]"
             )
     if any(r.outcome == "error" for r in results):
         raise typer.Exit(1)

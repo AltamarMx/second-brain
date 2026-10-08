@@ -30,7 +30,7 @@ Este repositorio es una biblioteca personal de artículos científicos. Se manej
 Se llaman con `uv run sb …`; los que muestran datos aceptan `--json`.
 
 - `sb status`: qué hay pendiente: PDFs en `inbox/`, artículos por estado, proyectos.
-- `sb ingest [RUTA|DOI…]`: ingiere `inbox/` (sin argumentos), PDFs o DOIs; `--doi DOI` fija el DOI de un PDF, `--dry-run`.
+- `sb ingest [RUTA|DOI…]`: ingiere `inbox/` (sin argumentos), PDFs o DOIs; `--doi DOI` fija el DOI de un PDF, `--key KEY` lo asocia a un artículo registrado.
 - `sb process [KEY…]`: resumen, clasificación y figuras con el LLM del perfil; `--pending`, `--force`.
 - `sb figures KEY`: vuelve a describir las figuras de un artículo.
 - `sb show KEY`: metadatos, clasificación y resumen (con `--json`, también `pdf.sha256`).
@@ -55,7 +55,7 @@ Se llaman con `uv run sb …`; los que muestran datos aceptan `--json`.
 - `sb project archive SLUG`: archiva un proyecto; `--restore` lo reactiva.
 - `sb bib`: BibTeX desde los registros; `-p SLUG` o `--from-tex main.tex`, `-o refs.bib`.
 - `sb bib sync`: reescribe los .bib de `[bib_outputs]` del perfil de esta máquina.
-- `sb import bib ARCHIVO.bib`: registra un .bib conservando sus citekeys (quedan esperando PDF); `--dry-run`.
+- `sb import bib ARCHIVO.bib`: registra un .bib conservando sus citekeys; copia los PDFs de su campo `file` (Zotero); `--dry-run`.
 - `sb check`: valida la biblioteca; `--retractions` consulta retractaciones (usa la red).
 - `sb doctor`: revisa que esta máquina tenga todo lo necesario.
 - `sb index update`: actualiza el índice de búsqueda con lo que cambió.

@@ -45,7 +45,7 @@ git add -A && git commit -m "agents: actualizar second-brain"
 | `sb doctor` | Revisa dependencias y configuración de esta máquina |
 | `sb check [--fast] [--json]` | Valida la biblioteca |
 | `sb status [--json]` | Muestra lo pendiente |
-| `sb ingest [PDFs o DOIs…] [--dois F] [--retry] [--doi D] [--project P] [--dry-run] [--limit N] [--json]` | Ingiere los PDFs de `inbox/`, los PDFs o DOIs indicados, o una lista de DOIs |
+| `sb ingest [PDFs o DOIs…] [--dois F] [--retry] [--doi D] [--key KEY] [--project P] [--dry-run] [--limit N] [--json]` | Ingiere los PDFs de `inbox/`, los PDFs o DOIs indicados, o una lista de DOIs. `--key` asocia un PDF a un artículo ya registrado |
 | `sb ingest --all [--push]` | Todo seguido: ingerir `inbox/`, procesar lo pendiente, validar y hacer commit de `library/` (y `git push` con `--push`) |
 | `sb pdf status [--json]` | Artículos que esperan PDF o cuyo PDF no está en esta máquina |
 | `sb pdf get KEY… \| --missing` | Descarga el PDF de artículos registrados |
@@ -202,7 +202,8 @@ cp carpeta-con-pdfs/*.pdf inbox/ && uv run sb ingest   # cada PDF se asocia a su
 - Sirve cualquier `.bib` (Zotero, JabRef, Mendeley o escrito a mano). Con DOI, Crossref (o DataCite) completa la entrada: sus valores ganan, pero un campo que Crossref no trae (autores, páginas…) se queda como en el `.bib`. Con `--prefer-bib` gana lo que escribiste en el `.bib` (p. ej. un informe que pide citarse "IPCC, 2022" aunque Crossref diga 2023) y Crossref solo llena lo que falte. Sin DOI, todo sale del `.bib`. Los `keywords` pasan a `tags`.
 - **Se conservan los citekeys** para que tus `.tex` sigan compilando. Si una clave no sirve como nombre de archivo (`Lopez:2019_x`, `Garcia2021` con mayúsculas), el artículo recibe un citekey válido (`lopez-2019-x`) y la clave original queda como **alias**. `sb bib` escribe la entrada con las dos claves, y `--from-tex` con la que cite el documento.
 - Si el artículo ya estaba en la biblioteca con otra clave, se agrega esa clave como alias.
-- Los PDFs se asocian por DOI o, si no tienen, por título, año y primer autor.
+- **PDFs de Zotero, Better BibTeX o JabRef:** si la entrada trae el campo `file` (exporta con "Exportar archivos" en Zotero, o con Better BibTeX), `sb import bib` copia ese PDF a su registro en el mismo paso, sin tocar el original. Si la primera página del PDF no muestra el título del registro (Zotero a veces cuelga un archivo del ítem equivocado), no lo asocia y lo avisa.
+- Los demás PDFs, soltados en `inbox/`, se asocian por DOI o, si no tienen, por título, año y primer autor. Para uno que no se asocia solo: `sb ingest RUTA --key KEY` (si el título no coincide, lo asocia igual pero lo marca `metadata_mismatch`).
 - Por proyectos: exporta un `.bib` por grupo o colección e impórtalo con `--project`.
 
 ## Pregunta suelta: `sb ask`

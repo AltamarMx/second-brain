@@ -74,6 +74,8 @@ class IngestResult:
 class IngestOptions:
     dry_run: bool = False
     forced_doi: str | None = None
+    key: str | None = None  # attach the (single) PDF to this record
+    strict_key: bool = False  # with key: refuse if the record's title is not in the PDF
     project: str | None = None
     today: dt.date = field(default_factory=dt.date.today)
 
@@ -218,6 +220,10 @@ class Ingestor:
                 raise IngestError(str(exc)) from exc
         if self.options.forced_doi and (len(paths) != 1 or dois):
             raise IngestError("--doi solo se puede usar con un único PDF")
+        if self.options.key and (len(paths) != 1 or dois or self.options.forced_doi):
+            raise IngestError("--key solo se puede usar con un único PDF (y sin --doi)")
+        if self.options.key and self.options.key not in self.index.papers:
+            raise IngestError(f"no existe el artículo {self.options.key}")
         with ingest_lock(self.lib):
             results = [self.ingest_one(path) for path in paths]
             results += [self.ingest_doi(doi) for doi in dois or []]
@@ -259,6 +265,8 @@ class Ingestor:
         sha = sha256_file(path)
         existing = self.index.find_by_sha(sha)
         if existing:
+            if self.options.key and existing != self.options.key:
+                raise IngestError(f"ese PDF ya es de {existing}")
             return self._known_file(path, existing, result)
         if sha in self.index.by_supplement_sha:
             citekey, supplement_id = self.index.by_supplement_sha[sha]
@@ -280,6 +288,8 @@ class Ingestor:
             return result
 
         extraction = extract(path, ocr_languages=self.config.extract.ocr_languages)
+        if self.options.key:
+            return self._attach_to(path, self.options.key, sha, extraction, result, source)
         resolved = self._resolve(extraction, expected_doi)
         doi = resolved.fields.get("doi")
         result.doi = doi
@@ -552,6 +562,32 @@ class Ingestor:
             result.outcome = "duplicate"
             result.message = f"mismo DOI que {citekey}"
             self._set_aside(path, DUPLICATES_DIR)
+        return result
+
+    def _attach_to(
+        self, path: Path, citekey: str, sha: str, extraction: Extraction, result: IngestResult,
+        source: PdfSource,
+    ) -> IngestResult:  # fmt: skip
+        """``--key``: this PDF is the one of ``citekey``. If the record's title is not on its
+        first pages it is still attached (flagged ``metadata_mismatch``), unless ``strict_key``."""
+        paper = self.index.papers[citekey]
+        result.citekey, result.doi = citekey, paper.doi
+        if paper.pdf is not None and (self.lib.pdfs_dir / f"{citekey}.pdf").exists():
+            result.outcome, result.message = "duplicate", f"{citekey} ya tiene su PDF"
+            return result
+        page_text = normalize_for_match(extraction.front_text)[:8000]
+        if not title_on_page(paper.title, page_text):
+            if self.options.strict_key:
+                result.message = f"el título de {citekey} no aparece en el PDF: no se asoció"
+                return result
+            result.message = f"el título de {citekey} no aparece en la p. 1: revísalo"
+            paper = paper.model_copy(update={"flags": sorted({*paper.flags, "metadata_mismatch"})})
+            if not self.options.dry_run:
+                self.lib.write_paper(paper, self.lib.read_paper(citekey).body)
+            self.index.add(paper)
+        message = result.message
+        result = self._known_doi(path, citekey, sha, extraction, result, source)
+        result.message = "; ".join(m for m in (result.message, message) if m)
         return result
 
     def _set_aside(self, path: Path, folder: str, reason: str | None = None) -> None:

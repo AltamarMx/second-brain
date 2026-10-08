@@ -15,7 +15,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 9 | media | Con DOI, Crossref sustituye todo el .bib, incluso con vacíos | ✅ resuelto |
 | 10 | media | Los preprints salen como `@article` sin revista | ✅ resuelto |
 | 11 | media | Nombres en minúsculas desde Crossref | ✅ resuelto |
-| 12 | media | Lo que viene de Zotero pierde sus metadatos y PDFs | pendiente |
+| 12 | media | Lo que viene de Zotero pierde sus metadatos y PDFs | ✅ resuelto |
 | 13 | media | Mensaje de error de descarga engañoso | pendiente |
 | 14 | media | `sb pdf get --json` informa un estado que no es el del registro | pendiente |
 | 15 | media | No hay forma de completar los PDFs locales desde una carpeta | pendiente |
@@ -114,6 +114,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Qué pasó:** la colección LCA entró como PDFs sueltos en `inbox/`, aunque Zotero ya tenía el DOI de Kyaw, por ejemplo.
 - **Propuesta:** que `sb import bib` lea el campo `file` de las exportaciones de Zotero y Better BibTeX y copie esos PDFs, para traer metadatos y PDF en un solo paso.
 - **Además:** avisar cuando el título del PDF no coincida con su registro. En Zotero, el reporte del NREL sobre México cuelga de un artículo que no tiene nada que ver (Arduin 2022).
+- **Resolución:** `sb import bib` lee el campo `file` (`desc:ruta:tipo` de Zotero y JabRef, o rutas sueltas de Better BibTeX; relativas al .bib) y copia el primer PDF a su registro en el mismo paso, sin tocar el original. Si la página 1 no muestra el título del registro, no lo asocia y lo avisa (caso NREL/Arduin). Nuevo `sb ingest PDF --key KEY` para asociar un PDF a un registro concreto (lo marca `metadata_mismatch` si el título no coincide).
 
 ## Prioridad media: descargas
 

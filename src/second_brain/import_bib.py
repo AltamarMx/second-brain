@@ -60,6 +60,8 @@ class ImportResult:
     citekey: str | None = None
     doi: str | None = None
     message: str = ""
+    pdf: str | None = None  # from the entry's ``file`` field (Zotero, Better BibTeX, JabRef)
+    pdf_outcome: str | None = None  # what attaching it did: attached, relinked, duplicate, error
 
 
 def decode(value: str | None) -> str | None:
@@ -110,6 +112,25 @@ def parse_authors(raw: str | None) -> list[dict[str, str | None]]:
                 family, given = " ".join(tokens[start:]), " ".join(tokens[:start])
         authors.append({"family": decode(family) or family, "given": decode(given)})
     return [a for a in authors if a["family"]]
+
+
+def entry_pdfs(entry: Any, base: Path) -> list[Path]:
+    """Existing PDFs of the entry's ``file`` field: ``desc:path:type`` items (Zotero, JabRef)
+    or bare paths (Better BibTeX), separated by ``;``; relative paths are from the .bib."""
+    field = next((f for k, f in entry.fields_dict.items() if k.lower() == "file"), None)
+    if field is None or not field.value:
+        return []
+    found = []
+    for item in re.split(r"(?<!\\);", field.value):
+        parts = re.split(r"(?<!\\):", item)
+        raw = parts[1] if len(parts) == 3 else item  # a Windows drive ("C\:") is escaped
+        raw = raw.replace("\\:", ":").replace("\\;", ";").replace("\\\\", "\\").strip()
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            candidate = base / candidate
+        if candidate.suffix.lower() == ".pdf" and candidate.is_file() and candidate not in found:
+            found.append(candidate)
+    return found
 
 
 def bib_fields(entry: Any) -> dict[str, Any]:
@@ -175,6 +196,8 @@ def import_bib(
         result = ImportResult(key=key, outcome="error")
         results.append(result)
         try:
+            pdfs = entry_pdfs(entry, path.parent)
+            result.pdf = str(pdfs[0]) if pdfs else None
             fields = bib_fields(entry)
             doi = fields["doi"]
             result.doi = doi
@@ -277,4 +300,31 @@ def import_bib(
             result.message = "; ".join(notes)
         except Exception as exc:  # one bad entry must not stop the import
             result.outcome, result.message = "error", f"{type(exc).__name__}: {exc}"
+    if not dry_run:
+        attach_pdfs(lib, client, results)
     return results
+
+
+def attach_pdfs(lib: Library, client: MetadataClient, results: list[ImportResult]) -> None:
+    """Copy each entry's PDF into its record. A PDF whose first pages do not show the record's
+    title is not attached: Zotero sometimes hangs a file on the wrong item."""
+    from .config import load_config
+    from .ingest.pipeline import IngestError, IngestOptions, Ingestor
+
+    pending = [
+        r
+        for r in results
+        if r.pdf and r.citekey and r.outcome != "error" and r.outcome != "conflict"
+    ]
+    if not pending:
+        return
+    ingestor = Ingestor(lib, load_config(lib.home), client, IngestOptions(strict_key=True))
+    for result in pending:
+        ingestor.options.key = result.citekey
+        try:
+            [done] = ingestor.run([Path(result.pdf)])
+        except IngestError as exc:
+            result.pdf_outcome, message = "error", str(exc)
+        else:
+            result.pdf_outcome, message = done.outcome, done.message
+        result.message = "; ".join(m for m in (result.message, message) if m)

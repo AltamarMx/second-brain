@@ -164,3 +164,64 @@ def test_prefer_bib(lib, tmp_path):
         app, ["--home", str(lib.home), "import", "bib", str(bib), "--prefer-bib", "--dry-run"]
     )
     assert result.exit_code == 0, result.output
+
+
+ZOTERO_BIB = r"""
+@article{garcia2021thermal,
+  author = {Garc{\'\i}a, Ana}, title = {Thermal performance of earth sheltered dwellings in hot dry climates},
+  journal = {Energy and Buildings}, year = {2021}, doi = {10.1234/enb.2021.001},
+  file = {Full Text PDF:files/12/Garcia - 2021 - Thermal.pdf:application/pdf;Snapshot:files/12/page.html:text/html}
+}
+@techreport{nrel2020mexico,
+  author = {{NREL}}, title = {Solar resource assessment for Mexico}, year = {2020},
+  file = {ZOTERO/storage/AB12/Arduin 2022.pdf}
+}
+"""
+
+
+def zotero_export(tmp_path):
+    folder = tmp_path / "export"
+    (folder / "files" / "12").mkdir(parents=True)
+    (folder / "ZOTERO" / "storage" / "AB12").mkdir(parents=True)
+    good = make_pdf(folder / "files" / "12" / "Garcia - 2021 - Thermal.pdf")
+    # Zotero hung an unrelated paper on the NREL report
+    wrong = make_pdf(folder / "ZOTERO" / "storage" / "AB12" / "Arduin 2022.pdf",
+                     title="Urban heat islands in Buenos Aires", doi_line=None)  # fmt: skip
+    bib = folder / "export.bib"
+    bib.write_text(ZOTERO_BIB, encoding="utf-8")
+    return bib, good, wrong
+
+
+def test_import_copies_the_pdfs_of_a_zotero_export(lib, tmp_path):
+    bib, good, wrong = zotero_export(tmp_path)
+    dry = import_bib(lib, client(lib), bib, dry_run=True, today=dt.date(2026, 10, 4))
+    assert [r.pdf for r in dry] == [str(good), str(wrong)]
+    assert list(lib.pdfs_dir.glob("*.pdf")) == []
+    results = import_bib(lib, client(lib), bib, today=dt.date(2026, 10, 4))
+    by_key = {r.key: r for r in results}
+    assert by_key["garcia2021thermal"].pdf_outcome == "attached"
+    paper = lib.read_paper("garcia2021thermal").meta
+    assert paper.status == "needs_processing" and paper.pdf is not None
+    assert (lib.pdfs_dir / "garcia2021thermal.pdf").is_file() and good.is_file()  # copied
+    nrel = by_key["nrel2020mexico"]
+    assert nrel.pdf_outcome == "error" and "no aparece" in nrel.message
+    assert lib.read_paper("nrel2020mexico").meta.pdf is None and wrong.is_file()
+    output = CliRunner().invoke(app, ["--home", str(lib.home), "import", "bib", str(bib)]).output
+    assert "ya existían" in output
+
+
+def test_ingest_with_key_attaches_to_that_record(lib, tmp_path):
+    lib.write_paper(
+        make_paper("informe2020x", doi=None, title="Informe de energía", status="awaiting_pdf")
+    )
+    pdf = make_pdf(tmp_path / "x.pdf", doi_line=None)  # its title is another one
+    [result] = run(lib, FakeServices(), paths=[pdf], key="informe2020x")
+    assert result.outcome == "attached" and "no aparece" in result.message
+    paper = lib.read_paper("informe2020x").meta
+    assert paper.pdf is not None and "metadata_mismatch" in paper.flags
+    assert paper.status == "needs_processing" and pdf.is_file()
+    [again] = run(lib, FakeServices(), paths=[pdf], key="informe2020x")
+    assert again.outcome == "duplicate"
+    lib.write_paper(make_paper("otro2021x", doi=None, title="Otro", status="awaiting_pdf"))
+    [taken] = run(lib, FakeServices(), paths=[pdf], key="otro2021x")
+    assert taken.outcome == "error" and "ya es de informe2020x" in taken.message
