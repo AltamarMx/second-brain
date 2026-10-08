@@ -64,7 +64,7 @@ Versión del esquema: **4** (la 2 agregó `aliases`; la 3, `reading`, `rating`, 
 | `rating` | entero o null | 1 a 5 |
 | `updates` | lista | Notas de Crossref sobre la obra: `type` (`retraction`, `correction`, `expression_of_concern`…), `doi`, `date`, `source` |
 | `suggested` | mapa o null | Metadatos que `sb process` leyó con el LLM en las primeras páginas de un PDF sin DOI, sin confirmar: `title`, `authors`, `year`, `type`, `container_title`, `publisher`, `doi`, `isbn`. `sb edit --accept` los aplica; se borran cuando el registro se revisa |
-| `provenance` | mapa | `metadata_source` (`crossref`, `datacite`, `bib`, `pdf`, `manual`, `llm`), `extractor`, `fulltext_sha256`, y la procedencia del LLM (`backend`, `model`, `prompt`, `machine`, `date`, `sha256`) de `process`, `classification`, `figures` y `metadata` (la sugerencia) |
+| `provenance` | mapa | `metadata_source` (`crossref`, `datacite`, `bib`, `bib+crossref`, `bib+datacite`, `pdf`, `manual`, `llm`), `extractor`, `fulltext_sha256`, y la procedencia del LLM (`backend`, `model`, `prompt`, `machine`, `date`, `sha256`) de `process`, `classification`, `figures` y `metadata` (la sugerencia) |
 
 El cuerpo contiene el resumen, con las secciones *En una frase*, *Problema y objetivo*, *Datos y métodos*, *Resultados principales*, *Conclusiones* y *Limitaciones (según los autores)*.
 

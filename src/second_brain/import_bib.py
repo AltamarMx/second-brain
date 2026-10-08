@@ -26,6 +26,7 @@ from .ingest.metadata import (
     NetworkError,
     crossref_fields,
     datacite_fields,
+    fill,
     flags_from_updates,
 )
 from .library import Library
@@ -157,9 +158,13 @@ def import_bib(
     path: Path,
     *,
     project: str | None = None,
+    prefer_bib: bool = False,
     dry_run: bool = False,
     today: dt.date | None = None,
 ) -> list[ImportResult]:
+    """Register the entries of ``path``. With a DOI, Crossref/DataCite fill the record (only
+    with values they have); with ``prefer_bib`` the .bib's own fields win and Crossref only
+    fills the gaps."""
     today = today or dt.date.today()
     index = LibraryIndex.build(lib)
     aliases = {a: p.citekey for p in index.papers.values() for a in p.aliases}
@@ -215,16 +220,15 @@ def import_bib(
             if doi:
                 try:
                     message = client.crossref_work(doi)
-                    if message:
-                        fields, source = (
-                            {**fields, **crossref_fields(message), "tags": fields["tags"]},
-                            "crossref",
-                        )
-                    elif attributes := client.datacite_work(doi):
-                        fields, source = (
-                            {**fields, **datacite_fields(attributes), "tags": fields["tags"]},
-                            "datacite",
-                        )
+                    found, service = (
+                        (crossref_fields(message), "crossref") if message else (None, "")
+                    )
+                    if found is None and (attributes := client.datacite_work(doi)):
+                        found, service = datacite_fields(attributes), "datacite"
+                    if found is not None:
+                        merged = fill(found, fields) if prefer_bib else fill(fields, found)
+                        fields = {**merged, "tags": fields["tags"]}
+                        source = f"bib+{service}" if prefer_bib else service
                 except NetworkError:
                     result.message = "sin conexión: se usaron los datos del .bib"
 

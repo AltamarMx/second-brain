@@ -122,3 +122,45 @@ def test_duplicate_alias_is_an_error(lib):
     lib.write_paper(make_paper("a2020x", doi="10.1/a", aliases=["X:1"]))
     lib.write_paper(make_paper("b2020x", doi="10.1/b", aliases=["X:1"]))
     assert any("alias" in i.message for i in run_checks(lib.home).errors)
+
+
+IPCC_DOI = "10.1017/9781009157926.001"
+IPCC_BIB = r"""
+@techreport{ipcc2022spm,
+  author = {{IPCC}}, title = {Summary for Policymakers}, year = {2022},
+  institution = {Cambridge University Press}, pages = {3--48}, doi = {10.1017/9781009157926.001}
+}
+"""
+
+
+def ipcc_services():
+    message = {"DOI": IPCC_DOI, "type": "book-chapter", "title": ["Summary for Policymakers"],
+               "author": [], "issued": {"date-parts": [[2023]]}, "publisher": "Cambridge University Press",
+               "container-title": ["Climate Change 2022: Mitigation of Climate Change"]}  # fmt: skip
+    return FakeServices(works={IPCC_DOI: message})
+
+
+def test_crossref_never_erases_bib_fields(lib, tmp_path):
+    bib = write_bib(tmp_path, IPCC_BIB)
+    [result] = import_bib(lib, client(lib, ipcc_services()), bib, today=dt.date(2026, 10, 4))
+    paper = lib.read_paper(result.citekey).meta
+    assert [a.family for a in paper.authors] == ["IPCC"]  # Crossref has no authors
+    assert paper.pages == "3-48"  # nor pages
+    assert paper.year == 2023 and paper.doi == IPCC_DOI  # what Crossref has, wins
+    assert paper.container_title == "Climate Change 2022: Mitigation of Climate Change"
+    assert paper.provenance.metadata_source == "crossref"
+
+
+def test_prefer_bib(lib, tmp_path):
+    bib = write_bib(tmp_path, IPCC_BIB)
+    [result] = import_bib(
+        lib, client(lib, ipcc_services()), bib, prefer_bib=True, today=dt.date(2026, 10, 4)
+    )
+    paper = lib.read_paper(result.citekey).meta
+    assert (paper.year, paper.type, paper.doi) == (2022, "report", IPCC_DOI)  # the .bib wins
+    assert paper.container_title == "Climate Change 2022: Mitigation of Climate Change"  # a gap
+    assert paper.provenance.metadata_source == "bib+crossref"
+    result = CliRunner().invoke(
+        app, ["--home", str(lib.home), "import", "bib", str(bib), "--prefer-bib", "--dry-run"]
+    )
+    assert result.exit_code == 0, result.output

@@ -12,7 +12,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 6 | media | El título se toma de la letra más grande de la p. 1 | ✅ resuelto |
 | 7 | media | Caracteres de fuentes matemáticas (CO₂ → "CCCC") | ✅ resuelto |
 | 8 | media | No se aprovechan identificadores de la página (SSRN) | ✅ resuelto |
-| 9 | media | Con DOI, Crossref sustituye todo el .bib, incluso con vacíos | pendiente |
+| 9 | media | Con DOI, Crossref sustituye todo el .bib, incluso con vacíos | ✅ resuelto |
 | 10 | media | Los preprints salen como `@article` sin revista | pendiente |
 | 11 | media | Nombres en minúsculas desde Crossref | pendiente |
 | 12 | media | Lo que viene de Zotero pierde sus metadatos y PDFs | pendiente |
@@ -94,6 +94,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Dónde:** `import_bib.py` (`{**fields, **crossref_fields(message)}`).
 - **Evidencia:** para el Resumen del IPCC (`10.1017/9781009157926.001`), Crossref devuelve 0 autores y año 2023, mientras que el propio documento pide citarlo como "IPCC, 2022". Hubo que dejarlo sin DOI.
 - **Propuesta:** combinar solo los valores de Crossref que no estén vacíos, o permitir que ganen los campos del .bib (`--prefer-bib`) conservando el DOI.
+- **Resolución:** `sb import bib` combina con `fill`: los valores de Crossref/DataCite ganan solo si no están vacíos (autores, páginas… del .bib se conservan). `--prefer-bib` invierte la prioridad: gana el .bib, Crossref solo llena huecos y se conserva el DOI (`metadata_source: bib+crossref`). El IPCC queda como "IPCC, 2022" con su DOI.
 
 ### 10. Los preprints salen como `@article` sin revista
 

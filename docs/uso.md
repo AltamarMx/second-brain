@@ -199,7 +199,7 @@ uv run sb import bib mi-biblioteca.bib             # un registro por entrada, es
 cp carpeta-con-pdfs/*.pdf inbox/ && uv run sb ingest   # cada PDF se asocia a su registro
 ```
 
-- Sirve cualquier `.bib` (Zotero, JabRef, Mendeley o escrito a mano). Con DOI, los metadatos se toman de Crossref; sin DOI, del `.bib`. Los `keywords` pasan a `tags`.
+- Sirve cualquier `.bib` (Zotero, JabRef, Mendeley o escrito a mano). Con DOI, Crossref (o DataCite) completa la entrada: sus valores ganan, pero un campo que Crossref no trae (autores, páginas…) se queda como en el `.bib`. Con `--prefer-bib` gana lo que escribiste en el `.bib` (p. ej. un informe que pide citarse "IPCC, 2022" aunque Crossref diga 2023) y Crossref solo llena lo que falte. Sin DOI, todo sale del `.bib`. Los `keywords` pasan a `tags`.
 - **Se conservan los citekeys** para que tus `.tex` sigan compilando. Si una clave no sirve como nombre de archivo (`Lopez:2019_x`, `Garcia2021` con mayúsculas), el artículo recibe un citekey válido (`lopez-2019-x`) y la clave original queda como **alias**. `sb bib` escribe la entrada con las dos claves, y `--from-tex` con la que cite el documento.
 - Si el artículo ya estaba en la biblioteca con otra clave, se agrega esa clave como alias.
 - Los PDFs se asocian por DOI o, si no tienen, por título, año y primer autor.

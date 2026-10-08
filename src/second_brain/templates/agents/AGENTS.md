@@ -76,7 +76,7 @@ Opciones completas: `uv run sb <comando> --help`.
 - `sb remove` borra registro, texto completo, figuras y textos de suplementos; conserva las notas y mueve el PDF local a `inbox/_eliminados/`. Se pierden proyectos, estado de lectura y calificación: anótalos antes.
 - Un PDF se asocia a un registro existente por sha256, por DOI o, si el registro aún no tiene PDF, por título parecido (similitud ≥ 93 y año ±1). Si el título extraído del PDF es malo, no se asocia y se crea un registro nuevo.
 - `sb ingest PDF --doi DOI` valida el artículo aunque el título del DOI no esté en la página 1 (solo agrega el flag `metadata_mismatch`). En cambio, un PDF que `sb ingest DOI` descarga para un DOI nuevo queda en `needs_review` en ese caso (p. ej. manuscritos con líneas numeradas).
-- `sb import bib`: sin DOI usa los campos del .bib; con DOI, los de Crossref/DataCite **sustituyen** a los del .bib (autor, año, tipo…).
+- `sb import bib`: sin DOI usa los campos del .bib; con DOI ganan los valores de Crossref/DataCite (los campos que no traen se quedan del .bib). Con `--prefer-bib` gana el .bib y Crossref solo llena huecos.
 - `sb bib` exporta toda tesis como doctoral: `@phdthesis` (en BibLaTeX, `@thesis` con `type = phdthesis`), también las de maestría.
 
 ## Flujos

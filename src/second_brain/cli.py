@@ -1314,6 +1314,13 @@ def import_bib_command(
     project: Annotated[
         str | None, typer.Option(help="Asignar todo a un proyecto existente.")
     ] = None,
+    prefer_bib: Annotated[
+        bool,
+        typer.Option(
+            "--prefer-bib",
+            help="Con DOI, ganan los campos del .bib; Crossref/DataCite solo llenan lo que falte.",
+        ),
+    ] = False,
     dry_run: Annotated[bool, typer.Option(help="Mostrar qué pasaría sin escribir nada.")] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
 ) -> None:
@@ -1331,7 +1338,9 @@ def import_bib_command(
             raise _project_error(exc) from exc
     config = load_config(lib.home)
     client = MetadataClient(lib.cache_dir, email=config.user.email)
-    results = import_bib(lib, client, path.expanduser(), project=project, dry_run=dry_run)
+    results = import_bib(
+        lib, client, path.expanduser(), project=project, prefer_bib=prefer_bib, dry_run=dry_run
+    )
     if as_json:
         print(json.dumps([dataclasses.asdict(r) for r in results], ensure_ascii=False, indent=2))
     else:
