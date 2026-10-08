@@ -413,18 +413,38 @@ class Ingestor:
     # --- files already known ---------------------------------------------------
 
     def _known_file(self, path: Path, citekey: str, result: IngestResult) -> IngestResult:
-        result.citekey = citekey
-        result.doi = self.index.papers[citekey].doi
+        """The exact PDF of a record: a duplicate, or the original coming back to ``pdfs/``."""
+        paper = self.index.papers[citekey]
+        sha = paper.pdf.sha256
+        result.citekey, result.doi = citekey, paper.doi
         local = self.lib.pdfs_dir / f"{citekey}.pdf"
-        if local.exists():
+        if local.exists() and sha256_file(local) == sha:
             result.outcome = "duplicate"
             result.message = f"es el mismo archivo que {citekey}"
             self._set_aside(path, DUPLICATES_DIR)
-        else:
-            result.outcome = "relinked"
-            result.message = f"PDF de {citekey} re-vinculado"
-            if not self.options.dry_run:
-                store_pdf(self.lib, path, local, self.index.papers[citekey].pdf.sha256)
+            return result
+        result.outcome = "relinked"
+        result.message = f"PDF de {citekey} re-vinculado"
+        aside = None
+        if local.exists():  # another version stood in for it (pdf_version_mismatch)
+            aside = _unique_destination(
+                self.lib.inbox_dir / DUPLICATES_DIR, f"{citekey}-otra-version.pdf"
+            )
+            result.message = (
+                f"el original de {citekey} reemplaza a la otra versión, que queda en "
+                f"{aside.relative_to(self.lib.home)}"
+            )
+        updated = paper.model_copy(
+            update={"flags": [f for f in paper.flags if f != "pdf_version_mismatch"]}
+        )
+        if not self.options.dry_run:
+            if aside:
+                aside.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(local, aside)
+            store_pdf(self.lib, path, local, sha)
+            if updated.flags != paper.flags:
+                self.lib.write_paper(updated, self.lib.read_paper(citekey).body)
+        self.index.add(updated)
         return result
 
     def _known_doi(

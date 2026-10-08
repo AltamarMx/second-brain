@@ -5,7 +5,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | # | Prioridad | Issue | Estado |
 |---|---|---|---|
 | 1 | alta | `sb ingest RUTA` borra el original fuera de `inbox/` | ✅ resuelto |
-| 2 | alta | Un PDF de otra versión impide colocar después el original | pendiente |
+| 2 | alta | Un PDF de otra versión impide colocar después el original | ✅ resuelto |
 | 3 | alta | No hay forma de corregir metadatos sin DOI | pendiente |
 | 4 | media | Nunca se extraen los autores de PDFs sin DOI | pendiente |
 | 5 | media | El año sale de cualquier número de 4 cifras | pendiente |
@@ -39,6 +39,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Qué pasó:** `sb pdf get` guardó otra versión para `universidad2023transferencia` y le puso el flag `pdf_version_mismatch`.
 - **Problema:** si después llega el original exacto (mismo sha256 que el registro), `_known_file` ve que `pdfs/KEY.pdf` ya existe, lo trata como `duplicate` y aparta el original. El archivo correcto nunca reemplaza al otro, salvo que alguien borre el local a mano.
 - **Propuesta:** si el PDF local tiene otro sha256, reemplazarlo por el original, apartar el anterior y quitar el flag.
+- **Resolución:** `_known_file` compara el sha256 del PDF local: si es otra versión, el original la reemplaza, la anterior queda en `inbox/_duplicados/KEY-otra-version.pdf` y se quita `pdf_version_mismatch`.
 
 ### 3. No hay forma de corregir los metadatos de un artículo sin DOI
 

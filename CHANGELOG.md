@@ -32,3 +32,4 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 ### Corregido
 
 - `sb ingest RUTA` y `sb attach` ya no borran el PDF original cuando está fuera de `inbox/` (p. ej. un adjunto de Zotero): lo copian.
+- Si llega el PDF original de un artículo cuyo `pdfs/KEY.pdf` es otra versión, el original la reemplaza (la otra queda en `inbox/_duplicados/`) y se quita `pdf_version_mismatch`.

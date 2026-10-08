@@ -122,6 +122,28 @@ def test_missing_local_pdf_is_relinked(lib):
     assert services.requests == []  # recognised by hash, no network needed
 
 
+def test_original_replaces_another_version(lib):
+    original = make_pdf(lib.inbox_dir / "a.pdf").read_bytes()
+    run(lib, FakeServices())
+    local = lib.pdfs_dir / "garcia2021thermal.pdf"
+    local.unlink()
+    make_pdf(lib.inbox_dir / "manuscrito.pdf", extra="Accepted manuscript")
+    [other] = run(lib, FakeServices())
+    assert other.outcome == "relinked"
+    assert "pdf_version_mismatch" in lib.read_paper("garcia2021thermal").meta.flags
+    stand_in = local.read_bytes()
+    (lib.inbox_dir / "original.pdf").write_bytes(original)
+    [result] = run(lib, FakeServices())
+    assert result.outcome == "relinked", result.message
+    assert local.read_bytes() == original
+    assert "pdf_version_mismatch" not in lib.read_paper("garcia2021thermal").meta.flags
+    aside = lib.inbox_dir / "_duplicados" / "garcia2021thermal-otra-version.pdf"
+    assert aside.read_bytes() == stand_in and lib.inbox_pdfs() == []
+    (lib.inbox_dir / "otra-vez.pdf").write_bytes(original)
+    [again] = run(lib, FakeServices())
+    assert again.outcome == "duplicate"
+
+
 def test_same_doi_other_file_is_a_duplicate(lib):
     make_pdf(lib.inbox_dir / "a.pdf")
     run(lib, FakeServices())
