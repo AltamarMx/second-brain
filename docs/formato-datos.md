@@ -61,7 +61,7 @@ Versión del esquema: **4** (la 2 agregó `aliases`; la 3, `reading`, `rating`, 
 | `status` | texto | `awaiting_pdf`, `needs_review`, `needs_processing`, `processed` |
 | `flags` | lista | `doi_uncertain`, `metadata_mismatch`, `ocr`, `possible_duplicate`, `pdf_version_mismatch`, `retracted` |
 | `added` | fecha | Obligatorio |
-| `reading` | texto o null | `por-leer`, `leyendo`, `leido` |
+| `reading` | texto o null | `por-leer`, `leyendo`, `leido`; null = sin marcar, que al filtrar cuenta como `por-leer` |
 | `rating` | entero o null | 1 a 5 |
 | `updates` | lista | Notas de Crossref sobre la obra: `type` (`retraction`, `correction`, `expression_of_concern`…), `doi`, `date`, `source` |
 | `suggested` | mapa o null | Metadatos que `sb process` leyó con el LLM en las primeras páginas de un PDF sin DOI, sin confirmar: `title`, `authors`, `year`, `type`, `genre`, `container_title`, `publisher`, `doi`, `isbn`. `sb edit --accept` los aplica; se borran cuando el registro se revisa |

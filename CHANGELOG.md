@@ -51,3 +51,4 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - `sb pdf get --json` (y `sb ingest DOI`) informan el estado real de un artículo ya registrado cuando la descarga falla, en lugar de `awaiting_pdf`.
 - `sb bib` conserva subíndices y superíndices: CO₂ sale como `CO\textsubscript{2}` y m² como `m\textsuperscript{2}`, en lugar de CO2.
 - Las llaves que protegen mayúsculas en BibTeX ya no incluyen la puntuación: `{IoT},` en lugar de `{IoT,}`.
+- `sb list --reading por-leer` (y `sb search`) incluye los artículos sin estado de lectura, en lugar de devolver 0.

@@ -39,6 +39,8 @@ def test_reading_status_and_filter(lib):
     assert (paper.reading, paper.rating) == ("leido", 4)
     hits = SearchIndex(lib).list(Filters(reading="leido"))
     assert [h.citekey for h in hits] == ["garcia2021thermal"]
+    to_read = SearchIndex(lib).list(Filters(reading="por-leer"))  # unmarked counts as to read
+    assert [h.citekey for h in to_read] == ["otro2020x"]
     assert cli(lib, "read", "garcia2021thermal", "--status", "visto").exit_code == 2
     cli(lib, "read", "garcia2021thermal", "--clear")
     assert lib.read_paper("garcia2021thermal").meta.reading is None

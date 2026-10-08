@@ -379,14 +379,14 @@ class SearchIndex:
         for pair in filters.extra:
             clauses.append(f"(' ' || {alias}.extra || ' ') LIKE ?")
             params.append(f"% {pair.strip().lower()} %")
-        for column, value in (
-            ("study_type", filters.study),
-            ("status", filters.status),
-            ("reading", filters.reading),
-        ):
+        for column, value in (("study_type", filters.study), ("status", filters.status)):
             if value:
                 clauses.append(f"{alias}.{column} = ?")
                 params.append(value)
+        if filters.reading:  # a paper nobody marked is still to be read
+            unmarked = f" OR {alias}.reading IS NULL" if filters.reading == "por-leer" else ""
+            clauses.append(f"({alias}.reading = ?{unmarked})")
+            params.append(filters.reading)
         for column, value in (
             ("countries", filters.country.upper() if filters.country else None),
             ("regions", filters.region),

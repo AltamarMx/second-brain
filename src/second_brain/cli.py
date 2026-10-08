@@ -1164,7 +1164,8 @@ def _index_warning(index: SearchIndex, as_json: bool) -> None:
 
 
 ReadingOpt = Annotated[
-    str | None, typer.Option(help="Estado de lectura: por-leer, leyendo, leido.")
+    str | None,
+    typer.Option(help="Estado de lectura: por-leer (incluye los no marcados), leyendo, leido."),
 ]
 FieldOpt = Annotated[
     list[str] | None,

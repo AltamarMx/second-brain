@@ -23,7 +23,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 17 | baja | Se pierde el subíndice de CO₂ en BibTeX | ✅ resuelto |
 | 18 | baja | Las llaves de protección incluyen la puntuación (`{IoT,}`) | ✅ resuelto |
 | 19 | baja | Prefijos de commit inconsistentes | ✅ resuelto |
-| 20 | baja | `sb list --reading por-leer` devuelve 0 | pendiente |
+| 20 | baja | `sb list --reading por-leer` devuelve 0 | ✅ resuelto |
 
 ## Prioridad alta: riesgo de perder archivos o bloqueos
 
@@ -163,3 +163,4 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 ### 20. `sb list --reading por-leer` devuelve 0
 
 - Los artículos nuevos tienen el estado de lectura en `null`, no en `por-leer`. **Propuesta:** tratar `null` como `por-leer` o documentarlo.
+- **Resolución:** El filtro `--reading por-leer` (en `sb list`, `sb search`, `sb ask` y MCP, que comparten `Filters`) incluye los artículos con `reading: null`: nadie los marcó, así que siguen por leer. Documentado en la ayuda, `docs/uso.md` y `docs/formato-datos.md`.
