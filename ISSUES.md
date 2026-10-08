@@ -7,7 +7,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 1 | alta | `sb ingest RUTA` borra el original fuera de `inbox/` | ✅ resuelto |
 | 2 | alta | Un PDF de otra versión impide colocar después el original | ✅ resuelto |
 | 3 | alta | No hay forma de corregir metadatos sin DOI | ✅ resuelto |
-| 4 | media | Nunca se extraen los autores de PDFs sin DOI | pendiente |
+| 4 | media | Nunca se extraen los autores de PDFs sin DOI | ✅ resuelto |
 | 5 | media | El año sale de cualquier número de 4 cifras | pendiente |
 | 6 | media | El título se toma de la letra más grande de la p. 1 | pendiente |
 | 7 | media | Caracteres de fuentes matemáticas (CO₂ → "CCCC") | pendiente |
@@ -55,6 +55,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Dónde:** la ruta sin DOI de `_resolve` (`ingest/pipeline.py`) solo devuelve título y año, así que `authors` queda vacío y el citekey empieza con `anon`.
 - **Evidencia:** en 9 de los 14 pendientes, los autores están claramente en la p. 1 o la p. 2: Ramírez Zúñiga et al., Calixto-Aguirre y Huelsz-Lesbros, Kyaw et al., Huelsz, Rechtman y Rojas, Garza Alejandre, Brito Picciotto y Ashtiani et al.
 - **Propuesta:** como `sb process` ya lee el texto con un LLM, que proponga los metadatos (autores, título, año, revista, tipo e identificadores) para los registros con `metadata_source: pdf` y los deje como sugerencia para que el usuario los confirme.
+- **Resolución:** `sb process` (y `--pending`, aunque el resumen ya exista) le pide al LLM los metadatos de las primeras 3 páginas de los registros con `metadata_source: pdf`, una sola vez, y los guarda en `suggested` (esquema 4) sin tocar el registro. `sb show` los muestra y `sb edit KEY --accept [--rekey]` los aplica.
 
 ### 5. El año sale de cualquier número de 4 cifras
 

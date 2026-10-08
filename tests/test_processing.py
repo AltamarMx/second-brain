@@ -62,6 +62,13 @@ class FakeBackend:
                 },
                 "search_terms": ["ventilación nocturna", "night ventilation", "Night ventilation"],
             }, "fake-model"
+        if "authors" in schema["properties"]:
+            return {
+                "title": "Night ventilation in Hermosillo",
+                "authors": [{"family": "Ramírez Zúñiga", "given": "Ana"}, {"family": " ", "given": None}],
+                "year": 2019, "type": "article-journal", "container_title": "Energy and Buildings",
+                "publisher": None, "doi": "https://doi.org/10.1016/J.ENBUILD.2019.1", "isbn": None,
+            }, "fake-model"  # fmt: skip
         numbers = re.findall(r"- Fig\. (\S+) \(p\. (\d+)\)", prompt)
         return {
             "figures": [
@@ -121,6 +128,42 @@ def test_process_writes_summary_classification_and_figures(lib, paper):
     assert "**Descripción (generada):** Gráfica 1." in figures.body
     assert backend.calls[1]["images"] == ["pagina-002.png"]
     assert "Título: Night ventilation" in backend.calls[0]["stdin"]
+
+
+def test_metadata_suggestion_for_pdf_records(lib, paper):
+    from second_brain.cli import _pending_keys
+
+    backend = FakeBackend()
+    proc = processor(lib, backend)
+    assert proc.process(paper).outcome == "processed"  # a record with a DOI: no suggestion
+    assert lib.read_paper(paper).meta.suggested is None
+    doc = lib.read_paper(paper)
+    pdf_record = doc.meta.model_copy(
+        update={"provenance": doc.meta.provenance.model_copy(update={"metadata_source": "pdf"})}
+    )
+    lib.write_paper(pdf_record, doc.body)
+    assert _pending_keys(lib, load_config(lib.home)) == [paper]  # already summarized, but pending
+    calls = len(backend.calls)
+    result = proc.process(paper)
+    assert "metadatos sugeridos" in result.message and len(backend.calls) == calls + 1
+    assert "<!-- page 1 -->" in backend.calls[-1]["stdin"]
+    paper_now = lib.read_paper(paper).meta
+    suggested = paper_now.suggested
+    assert [a.family for a in suggested.authors] == ["Ramírez Zúñiga"]  # blank author dropped
+    assert (suggested.year, suggested.doi) == (2019, "10.1016/j.enbuild.2019.1")
+    assert paper_now.provenance.metadata.prompt == "metadata.v1"
+    assert _pending_keys(lib, load_config(lib.home)) == []  # suggested only once
+    assert proc.process(paper).outcome == "skipped"
+
+
+def test_suggested_metadata_drops_nonsense():
+    from second_brain.processing import suggested_metadata
+
+    raw = {"title": "  ", "authors": [], "year": 3015, "type": "tesis", "container_title": None,
+           "publisher": "UNAM", "doi": "sin doi", "isbn": "978-607"}  # fmt: skip
+    suggestion = suggested_metadata(raw, TODAY)
+    assert (suggestion.title, suggestion.year, suggestion.type, suggestion.doi) == (None,) * 4
+    assert (suggestion.publisher, suggestion.isbn) == ("UNAM", "978-607")
 
 
 def test_process_is_idempotent_and_respects_hand_edits(lib, paper):

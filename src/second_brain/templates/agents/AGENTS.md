@@ -40,7 +40,7 @@ Se llaman con `uv run sb …`; los que muestran datos aceptan `--json`.
 - `sb list`: artículos con filtros, sin tema; `--status needs_review`, `--reading`. Para contar.
 - `sb ask "pregunta"`: respuesta con citas sin abrir chat; `--paper KEY`, `-p SLUG`.
 - `sb read KEY`: estado de lectura y calificación; `--status leyendo`, `--rating 4`.
-- `sb edit KEY`: corrige metadatos sin tocar texto, resumen ni proyectos; `--author`, `--title`, `--year`, `--from-doi DOI`, `--rekey`.
+- `sb edit KEY`: corrige metadatos sin tocar texto, resumen ni proyectos; `--from-doi DOI`, `--accept` (lo sugerido por `sb process`), `--rekey`.
 - `sb refs [KEY]`: citas dentro de la biblioteca; `--missing` (obras que te faltan), `--html` (grafo).
 - `sb attach KEY PDF`: agrega material suplementario buscable; `--label`.
 - `sb remove KEY`: elimina un artículo (ver abajo); `--yes` sin confirmación.

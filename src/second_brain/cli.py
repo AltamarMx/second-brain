@@ -505,6 +505,16 @@ def show(
     if paper.reading or paper.rating:
         stars = "★" * (paper.rating or 0)
         console.print(f"Lectura: {paper.reading or '-'} {stars}")
+    if paper.suggested:
+        console.print("[yellow]Metadatos sugeridos (leídos del PDF por el LLM; sin confirmar):[/]")
+        suggestion = paper.suggested.model_dump(exclude_defaults=True)
+        if paper.suggested.authors:
+            suggestion["authors"] = "; ".join(
+                f"{a.family}, {a.given}" if a.given else a.family for a in paper.suggested.authors
+            )
+        for name, value in suggestion.items():
+            console.print(f"  {name}: {escape(str(value))}")
+        console.print(f"  [dim]Para aplicarlos: sb edit {citekey} --accept --rekey[/]")
     extra = {k: v for k, v in paper.classification.extra.items() if v}
     if extra:
         console.print(
@@ -1596,6 +1606,7 @@ def edit(
     from_doi: Annotated[str | None, typer.Option("--from-doi", help="Traer los metadatos de este DOI (Crossref/DataCite).")] = None,
     rekey: Annotated[bool, typer.Option("--rekey", help="Nuevo citekey según los metadatos; el anterior queda como alias.")] = False,
     key: Annotated[str | None, typer.Option("--key", help="Nuevo citekey elegido (implica --rekey).")] = None,
+    accept: Annotated[bool, typer.Option("--accept", help="Aplicar los metadatos sugeridos por sb process.")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Mostrar qué cambiaría sin escribir.")] = False,
     as_json: JsonOpt = False,
 ) -> None:  # fmt: skip
@@ -1617,7 +1628,7 @@ def edit(
             doi_fields["doi"] = normalize_doi(from_doi)
         result = edit_paper(
             lib, citekey, changes, doi_fields=doi_fields, source=source,
-            rekey=rekey, new_key=key, dry_run=dry_run,
+            rekey=rekey, new_key=key, accept=accept, dry_run=dry_run,
         )  # fmt: skip
     except (EditError, NetworkError) as exc:
         console.print(f"[red]✗[/] {escape(str(exc))}")
@@ -1777,14 +1788,17 @@ def refs(
 
 
 def _pending_keys(lib: Library, config, stale: bool = False, figures: bool = True) -> list[str]:
-    """Papers with full text whose summary or figures are still missing (or outdated with stale)."""
+    """Papers with full text whose summary, figures or metadata suggestion are still missing
+    (or outdated with stale)."""
     checker = Processor(lib, config, backend=None, machine="")  # type: ignore[arg-type]
     keys = []
     for doc in lib.iter_papers():
         if isinstance(doc, InvalidDocument) or not lib.fulltext_path(doc.meta.citekey).is_file():
             continue
-        if checker.needs_summary(doc.meta, doc.body, stale) or (
-            figures and checker.needs_figures(doc.meta, stale)
+        if (
+            checker.needs_summary(doc.meta, doc.body, stale)
+            or (figures and checker.needs_figures(doc.meta, stale))
+            or checker.needs_metadata(doc.meta)
         ):
             keys.append(doc.meta.citekey)
     return keys

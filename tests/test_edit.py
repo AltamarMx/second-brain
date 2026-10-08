@@ -10,7 +10,13 @@ from second_brain import bibtex
 from second_brain.checks import run_checks
 from second_brain.cli import app
 from second_brain.edit import EditError, edit_paper, lookup_doi, parse_author
-from second_brain.models import FigureSet, FullText, Supplement, SupplementText
+from second_brain.models import (
+    FigureSet,
+    FullText,
+    SuggestedMetadata,
+    Supplement,
+    SupplementText,
+)
 
 TODAY = dt.date(2026, 10, 7)
 runner = CliRunner()
@@ -141,6 +147,30 @@ def test_from_doi_only_fills_what_crossref_has(lib):
     missing = SimpleNamespace(crossref_work=lambda doi: None, datacite_work=lambda doi: None)
     with pytest.raises(EditError, match="no existe"):
         lookup_doi(missing, "10.1/nada")
+
+
+def test_accept_suggestion(lib):
+    anon_paper(lib)
+    with pytest.raises(EditError, match="no tiene metadatos sugeridos"):
+        edit_paper(lib, "anon2007consumo", {}, accept=True)
+    doc = lib.read_paper("anon2007consumo")
+    suggestion = SuggestedMetadata(
+        title="Consumo de energía en viviendas de Morelos",
+        authors=[{"family": "Huelsz", "given": "Guadalupe"}], year=2018,
+        container_title="Ingeniería", isbn="978-607-1",
+    )  # fmt: skip
+    lib.write_paper(doc.meta.model_copy(update={"suggested": suggestion}), doc.body)
+    shown = runner.invoke(app, ["--home", str(lib.home), "show", "anon2007consumo"]).output
+    assert "Metadatos sugeridos" in shown and "Huelsz, Guadalupe" in shown and "--accept" in shown
+    result = edit_paper(lib, "anon2007consumo", {"year": 2019}, accept=True, rekey=True)
+    assert result.citekey == "huelsz2019consumo" and result.reviewed
+    paper = lib.read_paper("huelsz2019consumo").meta
+    assert paper.title == "Consumo de energía en viviendas de Morelos" and paper.year == 2019
+    assert paper.ids.isbn == "978-607-1" and paper.suggested is None
+    assert paper.provenance.metadata_source == "manual"  # you changed something on top
+    lib.write_paper(paper.model_copy(update={"suggested": suggestion, "status": "needs_review"}))
+    edit_paper(lib, "huelsz2019consumo", {}, accept=True)
+    assert lib.read_paper("huelsz2019consumo").meta.provenance.metadata_source == "llm"
 
 
 def test_cli_edit(lib):

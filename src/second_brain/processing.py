@@ -21,14 +21,18 @@ from typing import Any, Literal
 import pymupdf
 
 from .backends import Backend, BackendError
+from .bibtex import BIBLATEX_TYPES
 from .config import ExtraField, LibraryConfig
+from .ingest.doi import DOI_RE, normalize_doi
 from .library import Library
-from .models import Classification, FigureRef, FigureSet, LlmProvenance, Paper
+from .models import Classification, FigureRef, FigureSet, LlmProvenance, Paper, SuggestedMetadata
 from .reading import split_pages
 
 PROCESS_PROMPT = "process.v1"
 FIGURES_PROMPT = "figures.v1"
 CLASSIFY_PROMPT = "classify.v1"
+METADATA_PROMPT = "metadata.v1"
+METADATA_PAGES = 3
 MAX_TEXT_CHARS = 400_000  # ~100k tokens; longer documents are truncated (noted in the result)
 MAX_FIGURE_PAGES = 12
 FIGURE_DPI = 110
@@ -174,6 +178,50 @@ FIGURES_SCHEMA = {
 }
 
 
+_TEXT = {"type": ["string", "null"]}
+METADATA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": _TEXT,
+        "authors": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"family": {"type": "string"}, "given": _TEXT},
+                "required": ["family", "given"],
+            },
+        },
+        "year": {"type": ["integer", "null"]},
+        "type": {"anyOf": [{"type": "string", "enum": sorted(BIBLATEX_TYPES)}, {"type": "null"}]},
+        "container_title": _TEXT,
+        "publisher": _TEXT,
+        "doi": _TEXT,
+        "isbn": _TEXT,
+    },
+    "required": ["title", "authors", "year", "type", "container_title", "publisher", "doi", "isbn"],
+}
+
+
+def suggested_metadata(raw: dict[str, Any], today: dt.date) -> SuggestedMetadata:
+    """The LLM's answer, keeping only values that make sense."""
+    year = raw.get("year")
+    doi = DOI_RE.search(raw.get("doi") or "")
+    return SuggestedMetadata(
+        title=(raw.get("title") or "").strip() or None,
+        authors=[
+            {"family": a["family"].strip(), "given": (a.get("given") or "").strip() or None}
+            for a in raw.get("authors") or []
+            if (a.get("family") or "").strip()
+        ],
+        year=year if isinstance(year, int) and 1000 <= year <= today.year + 1 else None,
+        type=raw.get("type") if raw.get("type") in BIBLATEX_TYPES else None,
+        container_title=(raw.get("container_title") or "").strip() or None,
+        publisher=(raw.get("publisher") or "").strip() or None,
+        doi=normalize_doi(doi.group(0)) if doi else None,
+        isbn=(raw.get("isbn") or "").strip() or None,
+    )
+
+
 def summary_markdown(summary: dict[str, Any]) -> str:
     parts = []
     for key, title in SECTION_TITLES.items():
@@ -260,6 +308,10 @@ class Processor:
             return True
         return stale and current.prompt != self.config.library.process_prompt
 
+    def needs_metadata(self, paper: Paper) -> bool:
+        """Records made from a PDF without DOI get a metadata suggestion, once."""
+        return paper.provenance.metadata_source == "pdf" and paper.provenance.metadata is None
+
     def needs_figures(self, paper: Paper, stale: bool = False) -> bool:
         if not self.config.figures.describe:
             return False
@@ -272,7 +324,7 @@ class Processor:
 
     def process(
         self, citekey: str, *, force: bool = False, stale: bool = False, figures: bool = True,
-        summary: bool = True,
+        summary: bool = True, metadata: bool = True,
     ) -> ProcessResult:  # fmt: skip
         result = ProcessResult(citekey, "skipped")
         try:
@@ -302,6 +354,10 @@ class Processor:
             if figures and (force or self.needs_figures(paper, stale)):
                 paper = self._describe_figures(paper, fulltext, result)
                 done.append(f"{paper.figures} figuras" if paper.figures else "sin figuras")
+
+            if metadata and self.needs_metadata(paper):
+                paper = self._suggest_metadata(paper, fulltext)
+                done.append("metadatos sugeridos (sb edit --accept)")
 
             if done:
                 if paper.status == "needs_processing" and paper.provenance.process is not None:
@@ -344,6 +400,20 @@ class Processor:
             }
         )
         return updated, body
+
+    def _suggest_metadata(self, paper: Paper, fulltext: str) -> Paper:
+        pages = split_pages(fulltext)[:METADATA_PAGES]
+        text = "\n\n".join(f"<!-- page {n} -->\n{t}" for n, t in pages)[:30_000]
+        prompt = prompt_text(
+            METADATA_PROMPT, types=", ".join(f'"{t}"' for t in sorted(BIBLATEX_TYPES))
+        )
+        output, model = self.backend.run(prompt, METADATA_SCHEMA, stdin=text)
+        provenance = paper.provenance.model_copy(
+            update={"metadata": self._provenance(model, METADATA_PROMPT)}
+        )
+        return paper.model_copy(
+            update={"suggested": suggested_metadata(output, self.today), "provenance": provenance}
+        )
 
     def _classification(self, raw: dict[str, Any]) -> Classification:
         vocab = self.config.vocab.study_type

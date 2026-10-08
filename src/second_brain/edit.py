@@ -76,9 +76,11 @@ def edit_paper(
     source: str = "manual",
     rekey: bool = False,
     new_key: str | None = None,
+    accept: bool = False,
     dry_run: bool = False,
 ) -> EditResult:
-    """Apply ``doi_fields`` (only their non-empty values) and then ``changes`` to a paper."""
+    """Apply ``doi_fields`` and, with ``accept``, the suggestion of ``sb process`` (only their
+    non-empty values), then ``changes``. A reviewed record loses its suggestion."""
     doc = lib.read_paper(citekey)
     paper = doc.meta
     others = [d.meta for d in lib.iter_papers() if not isinstance(d, InvalidDocument)]
@@ -90,6 +92,16 @@ def edit_paper(
     data = paper.model_dump()
     if doi_fields:
         data = fill(data, {k: v for k, v in doi_fields.items() if k in FROM_DOI})
+    if accept:
+        if paper.suggested is None:
+            raise EditError(
+                f"{citekey} no tiene metadatos sugeridos (sb process los propone para los "
+                "registros sacados de un PDF sin DOI)"
+            )
+        suggestion = paper.suggested.model_dump()
+        isbn = suggestion.pop("isbn")
+        data = fill(data, {**suggestion, "ids": {"isbn": isbn}})
+        source = "llm" if not changes and source == "manual" else source
     data.update(changes)
     if data.get("doi"):
         data["doi"] = normalize_doi(data["doi"])
@@ -109,6 +121,8 @@ def edit_paper(
         result.reviewed = True
         update["status"] = "processed" if paper.provenance.process else "needs_processing"
         flags -= REVIEW_FLAGS
+    if result.reviewed or accept:
+        update["suggested"] = None
     update["flags"] = sorted(flags)
     updated = updated.model_copy(update=update)
 

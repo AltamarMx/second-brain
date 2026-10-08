@@ -11,9 +11,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = (
-    3  # 2: Paper.aliases; 3: reading, rating, supplements, updates, classification.extra
-)
+# 2: Paper.aliases; 3: reading, rating, supplements, updates, classification.extra;
+# 4: suggested, provenance.metadata
+SCHEMA_VERSION = 4
 
 CITEKEY_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 SLUG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
@@ -117,6 +117,20 @@ class Provenance(Model):
     process: LlmProvenance | None = None
     classification: LlmProvenance | None = None  # sb process --reclassify
     figures: LlmProvenance | None = None
+    metadata: LlmProvenance | None = None  # the suggestion in Paper.suggested
+
+
+class SuggestedMetadata(Model):
+    """Metadata an LLM read in the first pages of a PDF without DOI; ``sb edit --accept`` applies it."""
+
+    title: str | None = None
+    authors: list[Author] = []
+    year: int | None = None
+    type: str | None = None
+    container_title: str | None = None
+    publisher: str | None = None
+    doi: str | None = None
+    isbn: str | None = None
 
 
 class Paper(Model):
@@ -152,6 +166,7 @@ class Paper(Model):
     reading: ReadingStatus | None = None
     rating: int | None = Field(default=None, ge=1, le=5)
     updates: list[Update] = []
+    suggested: SuggestedMetadata | None = None
     provenance: Provenance = Provenance()
 
 

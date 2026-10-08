@@ -21,7 +21,8 @@ description: Ingerir artículos en la biblioteca (PDFs de inbox/ o DOIs), resolv
 
 Un artículo queda en `needs_review` cuando su DOI es dudoso o no lo tiene (título y año aproximados, sin autores: citekey `anon…`). Se corrige con `sb edit`, que no toca texto, resumen, proyectos ni estado de lectura, y lo saca de `needs_review`. Lista los pendientes con `uv run sb list --status needs_review --json`.
 
-1. **Lee la primera página:** `uv run sb text KEY --pages 1-2`. Autores, revista, año y DOI suelen estar ahí aunque la extracción haya fallado. Propón al usuario los metadatos que encontraste y pregúntale antes de aplicarlos.
+1. **Mira la sugerencia:** si `uv run sb show KEY --json` trae `suggested` (metadatos que el LLM leyó en las primeras páginas al procesar), compárala con `uv run sb text KEY --pages 1-2`; si no la trae, lee esas páginas tú. Autores, revista, año y DOI suelen estar ahí aunque la extracción haya fallado. Propón al usuario los metadatos y pregúntale antes de aplicarlos.
+   Si la sugerencia es correcta: `uv run sb edit KEY --accept --rekey --dry-run`, y luego sin `--dry-run`; puedes corregir algún campo en la misma orden (`--year 2018`).
 2. **Con DOI confirmado por el usuario:** `uv run sb edit KEY --from-doi DOI --rekey --dry-run`, y luego sin `--dry-run`. Solo aplica los valores que Crossref/DataCite traen; lo que escribas en la misma orden (p. ej. `--year 2022`) tiene prioridad.
 3. **Sin DOI:** `uv run sb edit KEY --author "Apellido, Nombre" --author "…" --title "…" --year AAAA --container "…" --type … --rekey --dry-run`, y luego sin `--dry-run`. `--author` sin coma es una organización (`--author IPCC`).
 4. **Si los metadatos ya eran correctos:** `uv run sb edit KEY` sin opciones lo marca como revisado.

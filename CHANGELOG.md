@@ -23,9 +23,11 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - `AGENTS.md` de la biblioteca: lista de comandos (un test exige que estén todos los de la CLI) y comportamientos no obvios; la skill `sb-ingerir` explica cómo resolver `needs_review`.
 - `sb ingest --all [--push]`: ingerir, procesar todo lo pendiente, validar y hacer commit en un solo paso.
 - `sb edit KEY`: corrige metadatos (a mano o con `--from-doi`, que solo aplica lo que Crossref trae) sin tocar texto, resumen, proyectos ni lectura, y saca al artículo de `needs_review`; `--rekey`/`--key` cambian el citekey y dejan el anterior como alias.
+- `sb process` propone metadatos (autores, título, año, tipo, revista, DOI, ISBN) para los artículos que entraron de un PDF sin DOI; quedan en `suggested` hasta que `sb edit KEY --accept` los aplica.
 
 ### Cambiado
 
+- Esquema de datos 4: `suggested` y `provenance.metadata` (metadatos propuestos por el LLM). Los archivos anteriores se siguen leyendo; `sb migrate` los actualiza.
 - Esquema de datos 3: `reading`, `rating`, `supplements`, `updates` y `classification.extra`.
 - Esquema de datos 2: `aliases` en los artículos. Los archivos de la versión 1 se siguen leyendo; `sb migrate` los actualiza.
 - BibTeX normaliza letras matemáticas Unicode (𝑪𝑶₂ → CO2).
