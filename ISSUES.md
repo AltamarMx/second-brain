@@ -18,7 +18,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 12 | media | Lo que viene de Zotero pierde sus metadatos y PDFs | ✅ resuelto |
 | 13 | media | Mensaje de error de descarga engañoso | ✅ resuelto |
 | 14 | media | `sb pdf get --json` informa un estado que no es el del registro | ✅ resuelto |
-| 15 | media | No hay forma de completar los PDFs locales desde una carpeta | pendiente |
+| 15 | media | No hay forma de completar los PDFs locales desde una carpeta | ✅ resuelto |
 | 16 | baja | El grado de las tesis no se distingue | pendiente |
 | 17 | baja | Se pierde el subíndice de CO₂ en BibTeX | pendiente |
 | 18 | baja | Las llaves de protección incluyen la puntuación (`{IoT,}`) | pendiente |
@@ -134,6 +134,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 
 - **Qué pasó:** hubo que buscar en Zotero por sha256 con un script para colocar 57 PDFs.
 - **Propuesta:** `sb pdf link CARPETA…`, que busque por sha256 y copie a `pdfs/KEY.pdf` sin mover nada; y `sb pdf open --missing`, porque hoy `--awaiting` no incluye los artículos ya procesados cuyo PDF falta en la máquina.
+- **Resolución:** `sb pdf link [CARPETA…] [--dry-run]` busca por sha256 (solo calcula el hash de los archivos con el tamaño exacto de un PDF buscado) los PDFs de artículos y suplementos que faltan en esta máquina, o cuyo archivo local es otra versión, en las carpetas indicadas y en `pdfs/`, y los coloca con la ingesta normal: copia, nunca mueve. También pone bajo el citekey nuevo el PDF que quedó con el viejo tras `sb edit --rekey`. `sb pdf open --missing` abre también los artículos procesados sin PDF local.
 
 ## Prioridad baja: BibTeX, esquema y documentación
 

@@ -276,3 +276,15 @@ def test_refs_cli_html(lib, tmp_path, monkeypatch):
     assert cli(lib, "refs", "--html", "-o", str(out), "--no-open").exit_code == 0
     assert out.is_file() and len(opened) == 1
     assert json.loads(cli(lib, "refs", "--json").output)["without_data"] == ["a2020x"]
+
+
+def test_pdf_open_missing_includes_processed_papers(lib, monkeypatch):
+    lib.write_paper(make_paper("a2020x", doi="10.1/a", status="processed"))
+    lib.write_paper(make_paper("b2020x", doi="10.1/b", status="awaiting_pdf", pdf=None))
+    opened = []
+    monkeypatch.setattr("webbrowser.open_new_tab", opened.append)
+    assert cli(lib, "pdf", "open", "--awaiting").exit_code == 0
+    assert opened == ["https://doi.org/10.1/b"]
+    opened.clear()
+    assert cli(lib, "pdf", "open", "--missing").exit_code == 0
+    assert opened == ["https://doi.org/10.1/a", "https://doi.org/10.1/b"]

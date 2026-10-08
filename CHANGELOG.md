@@ -25,6 +25,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - `sb edit KEY`: corrige metadatos (a mano o con `--from-doi`, que solo aplica lo que Crossref trae) sin tocar texto, resumen, proyectos ni lectura, y saca al artículo de `needs_review`; `--rekey`/`--key` cambian el citekey y dejan el anterior como alias.
 - `sb process` propone metadatos (autores, título, año, tipo, revista, DOI, ISBN) para los artículos que entraron de un PDF sin DOI; quedan en `suggested` hasta que `sb edit KEY --accept` los aplica.
 - `sb import bib` copia los PDFs del campo `file` de las exportaciones de Zotero, Better BibTeX y JabRef a sus registros, y no asocia los que no muestran el título del registro; `sb ingest PDF --key KEY` asocia un PDF a un artículo concreto.
+- `sb pdf link [CARPETA…]`: coloca en `pdfs/` los PDFs que faltan en esta máquina buscándolos por sha256 (p. ej. en `~/Zotero/storage`), sin mover los originales; `sb pdf open --missing` abre también los procesados sin PDF local.
 
 ### Cambiado
 

@@ -46,7 +46,8 @@ Se llaman con `uv run sb …`; los que muestran datos aceptan `--json`.
 - `sb remove KEY`: elimina un artículo (ver abajo); `--yes` sin confirmación.
 - `sb pdf status`: artículos que esperan PDF o cuyo PDF no está en esta máquina.
 - `sb pdf get [KEY…]`: descarga el PDF de artículos ya registrados; `--missing`.
-- `sb pdf open KEY`: abre el PDF local o la página del artículo; `--awaiting`.
+- `sb pdf link [CARPETA…]`: coloca en `pdfs/` los PDFs que faltan, buscándolos por sha256 (copia, no mueve); p. ej. `~/Zotero/storage`.
+- `sb pdf open KEY`: abre el PDF local o la página del artículo; `--awaiting`, `--missing`.
 - `sb project create SLUG`: crea un proyecto; `--name`, `--kind`.
 - `sb project add SLUG KEY…`: agrega artículos a un proyecto; `--note`.
 - `sb project remove SLUG KEY…`: los quita del proyecto (siguen en la biblioteca).

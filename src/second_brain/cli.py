@@ -681,6 +681,51 @@ def pdf_get(
     _run_ingest(ingestor, [], wanted, as_json, dry_run=False)
 
 
+@pdf_app.command("link")
+def pdf_link(
+    ctx: typer.Context,
+    folders: Annotated[
+        list[Path] | None,
+        typer.Argument(help="Carpetas donde buscar, p. ej. ~/Zotero/storage (pdfs/ siempre)."),
+    ] = None,
+    dry_run: Annotated[bool, typer.Option(help="Mostrar qué se colocaría, sin copiar.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Salida en JSON para agentes.")] = False,
+) -> None:
+    """Coloca en pdfs/ los PDFs que faltan en esta máquina buscándolos por su sha256 (copia, no mueve)."""
+    from .ingest.link import find_pdfs, wanted_pdfs
+
+    lib = Library(_home(ctx))
+    roots = [f.expanduser() for f in folders or []]
+    for folder in roots:
+        if not folder.is_dir():
+            console.print(f"[red]✗[/] no existe la carpeta {escape(str(folder))}")
+            raise typer.Exit(2)
+    ingestor = _ingestor(lib, IngestOptions(dry_run=dry_run), interactive=False)
+    wanted = wanted_pdfs(lib, ingestor.index)
+    with console.status(f"Buscando {len(wanted)} PDFs…"):
+        paths = find_pdfs([*roots, lib.pdfs_dir], wanted) if wanted else []
+    results = ingestor.run(paths) if paths else []
+    for path, result in zip(paths, results, strict=True):
+        if (
+            not dry_run
+            and result.outcome == "relinked"
+            and path.parent == lib.pdfs_dir
+            and path.exists()
+        ):
+            path.unlink()  # ours under an old citekey (sb edit --rekey): now under the new one
+    if as_json:
+        print(json.dumps([dataclasses.asdict(r) for r in results], ensure_ascii=False, indent=2))
+        return
+    if not wanted:
+        console.print("[green]✓[/] No falta ningún PDF en esta máquina.")
+        return
+    if results:
+        _print_ingest(results, dry_run)
+    left = len(wanted) - sum(1 for r in results if r.outcome == "relinked")
+    if left:
+        console.print(f"[dim]{left} siguen sin PDF aquí: sb pdf status · sb pdf get --missing[/]")
+
+
 @pdf_app.command("open")
 def pdf_open(
     ctx: typer.Context,
@@ -688,15 +733,26 @@ def pdf_open(
     awaiting: Annotated[
         bool, typer.Option(help="Abrir en el navegador los artículos que esperan PDF.")
     ] = False,
-    limit: Annotated[int, typer.Option(min=1, help="Máximo de pestañas con --awaiting.")] = 10,
+    missing: Annotated[
+        bool,
+        typer.Option(help="Abrir los que no tienen PDF en esta máquina (también los procesados)."),
+    ] = False,
+    limit: Annotated[
+        int, typer.Option(min=1, help="Máximo de pestañas con --awaiting o --missing.")
+    ] = 10,
 ) -> None:
     """Abre el PDF local o, si no está, la página del artículo en el navegador."""
     lib = Library(_home(ctx))
-    if awaiting:
+    if awaiting or missing:
         pending = [
             d.meta
             for d in lib.iter_papers()
-            if not isinstance(d, InvalidDocument) and d.meta.status == "awaiting_pdf" and d.meta.doi
+            if not isinstance(d, InvalidDocument)
+            and d.meta.doi
+            and (
+                d.meta.status == "awaiting_pdf"
+                or (missing and not (lib.pdfs_dir / f"{d.meta.citekey}.pdf").exists())
+            )
         ]
         for paper in pending[:limit]:
             console.print(f"[yellow]…[/] {paper.citekey}  https://doi.org/{paper.doi}")
@@ -707,7 +763,7 @@ def pdf_open(
         )
         return
     if citekey is None:
-        console.print("[red]✗[/] indica un citekey o usa --awaiting")
+        console.print("[red]✗[/] indica un citekey o usa --awaiting o --missing")
         raise typer.Exit(2)
     paper = _read_paper(lib, citekey).meta
     local = lib.pdfs_dir / f"{citekey}.pdf"
@@ -1681,7 +1737,7 @@ def edit(
             console.print(f"    [dim]{src} → {dest}[/]")
         console.print(
             f"[dim]En tus otras computadoras el PDF local sigue como pdfs/{result.old_citekey}.pdf: "
-            f"renómbralo a pdfs/{result.citekey}.pdf.[/]"
+            "allí, sb pdf link lo pone en su lugar.[/]"
         )
 
 

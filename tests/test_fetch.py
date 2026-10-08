@@ -303,3 +303,36 @@ def test_unreachable_publisher_is_not_reported_as_offline(tmp_path):
     with pytest.raises(FetchFailure) as info:
         fetcher.fetch(DOI, tmp_path / "o.pdf")
     assert info.value.reason == "offline" and "doi.org" in str(info.value)
+
+
+def test_pdf_link_finds_missing_pdfs_by_hash(lib, tmp_path):
+    from typer.testing import CliRunner
+
+    from second_brain.cli import app
+    from second_brain.edit import edit_paper
+
+    original = make_pdf(lib.inbox_dir / "a.pdf").read_bytes()
+    ingestor_for(lib, FakeWeb(tmp_path)).run(lib.inbox_pdfs())
+    local = lib.pdfs_dir / "garcia2021thermal.pdf"
+    local.unlink()
+    zotero = tmp_path / "Zotero" / "storage" / "AB12"
+    zotero.mkdir(parents=True)
+    (zotero / "Garcia 2021.pdf").write_bytes(original)
+    (zotero / "same size.pdf").write_bytes(b"x" * len(original))  # hashed, but not ours
+    home = ["--home", str(lib.home)]
+    dry = CliRunner().invoke(app, [*home, "pdf", "link", str(tmp_path / "Zotero"), "--dry-run"])
+    assert dry.exit_code == 0 and not local.exists()
+    result = CliRunner().invoke(app, [*home, "pdf", "link", str(tmp_path / "Zotero"), "--json"])
+    assert result.exit_code == 0, result.output
+    assert [r["outcome"] for r in json.loads(result.output)] == ["relinked"]
+    assert local.read_bytes() == original and (zotero / "Garcia 2021.pdf").is_file()  # copied
+
+    # after sb edit --rekey on another machine, the local PDF keeps the old name
+    edit_paper(lib, "garcia2021thermal", {}, new_key="garcia2021earth")
+    new = lib.pdfs_dir / "garcia2021earth.pdf"
+    new.rename(local)
+    result = CliRunner().invoke(app, [*home, "pdf", "link"])
+    assert result.exit_code == 0, result.output
+    assert new.read_bytes() == original and not local.exists()
+    result = CliRunner().invoke(app, [*home, "pdf", "link"])
+    assert "No falta ningún PDF" in result.output
