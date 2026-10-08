@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import io
+import re
 import subprocess
 import unicodedata
 from dataclasses import dataclass, field
@@ -13,6 +14,9 @@ from importlib.metadata import version
 from pathlib import Path
 
 import pymupdf
+from rapidfuzz import fuzz
+
+from ..textutil import normalize_for_match
 
 with contextlib.redirect_stdout(io.StringIO()):  # it prints an advertisement on import
     import pymupdf4llm
@@ -65,29 +69,102 @@ def installed_ocr_languages() -> frozenset[str]:
     return frozenset(line.strip() for line in result.stdout.splitlines()[1:] if line.strip())
 
 
-def _title_guess(page: pymupdf.Page, metadata_title: str | None) -> str | None:
-    """Largest text in the top half of page 1; falls back to the PDF's title metadata."""
-    spans = []
+# Text on a cover that is never the title.
+NOTICE_RE = re.compile(
+    r"preprint|peer[- ]?review|manuscript|pre-?proof|article in press|electronic copy|"
+    r"downloaded from|contents lists available|available online|all rights reserved|"
+    r"creative commons|open access|research article|original (?:article|paper)|"
+    r"artículo (?:original|de investigación)|\bissn\b|\bisbn\b",
+    re.IGNORECASE,
+)
+INSTITUTION_RE = re.compile(
+    r"^(?:universidad|university|instituto|institute|facultad|faculty|escuela|school|college|"
+    r"departamento|department|centro|center|centre|posgrado|programa|colegio|secretar[ií]a|"
+    r"ministry|ministerio|consejo)\b",
+    re.IGNORECASE,
+)
+# Where a thesis cover stops being the title.
+THESIS_CUT_RE = re.compile(
+    r"\s+(?:a dissertation|a thesis|dissertation (?:presented|submitted)|"
+    r"thesis (?:presented|submitted)|tesis que|tesis para|que para obtener|para obtener el|"
+    r"presented by|submitted by|presentad[ao] por|elaborad[ao] por)\b.*$",
+    re.IGNORECASE,
+)
+# "… by DIANA ANDREA BRITO": "by"/"por" followed only by a name (not "by night ventilation").
+BYLINE_RE = re.compile(r"\s+(?:by|por)\s+((?:[A-ZÁÉÍÓÚÑ][\w.'-]*\s*){1,6})$")
+FILENAME_RE = re.compile(
+    r"\.(?:docx?|pdf|tex|indd|rtf|odt)$|microsoft word|^untitled|^document\d*$", re.I
+)
+TITLE_PAGES = 3
+
+
+def _lines(page: pymupdf.Page) -> list[tuple[float, str]]:
+    """``(font size, text)`` of each line in the top three quarters of a page, in reading
+    order. Spans of one line are joined, so a subscript stays with its word."""
+    lines = []
     for block in page.get_text("dict")["blocks"]:
         for line in block.get("lines", []):
-            for span in line["spans"]:
-                text = span["text"].strip()
-                if len(text) > 2 and span["bbox"][1] < page.rect.height * 0.6:
-                    spans.append((round(span["size"], 1), text))
-    if spans:
-        largest = max(size for size, _ in spans)
-        title = unicodedata.normalize(
-            "NFKC", " ".join(text for size, text in spans if size >= largest - 0.5)
+            spans = [s for s in line["spans"] if s["text"].strip()]
+            if not spans or line["bbox"][1] > page.rect.height * 0.75:
+                continue
+            text = " ".join("".join(s["text"] for s in spans).split())
+            lines.append((round(max(s["size"] for s in spans), 1), text))
+    return lines
+
+
+def _is_institution(text: str) -> bool:
+    """ "UNIVERSIDAD AUTÓNOMA…", "Universidad Autónoma de…", "Centro de Investigación…", but not
+    a title that starts with one of those words ("Centro histórico de Mérida…")."""
+    match = INSTITUTION_RE.match(text)
+    if not match:
+        return False
+    rest = text[match.end() :].split()
+    if text.isupper() or (rest and rest[0][:1].isupper()):
+        return True
+    return len(rest) > 1 and rest[0].lower() in ("de", "del", "of", "for") and rest[1][:1].isupper()
+
+
+def _clean_title(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text)
+    text = THESIS_CUT_RE.sub("", text)
+    return BYLINE_RE.sub("", text).strip(" .,:;-")
+
+
+def _layout_title(page: pymupdf.Page) -> str | None:
+    """The first block of lines in the largest type, skipping notices and institution names."""
+    lines = [
+        (size, text)
+        for size, text in _lines(page)
+        if len(text) > 2 and not NOTICE_RE.search(text) and not _is_institution(text)
+    ]
+    if not lines:
+        return None
+    largest = max(size for size, _ in lines)
+    group: list[str] = []
+    for size, text in lines:
+        if size >= largest - 0.5:
+            group.append(text)
+        elif group:
+            break
+    title = _clean_title(" ".join(group))
+    return title[:400] if len(title) >= 8 and len(title.split()) >= 2 else None
+
+
+def _title_guess(doc: pymupdf.Document, metadata_title: str | None, front_text: str) -> str | None:
+    """Title of a PDF without DOI: the PDF's title metadata when it is a real title that
+    the first pages show, else the largest type of the first pages, else the metadata."""
+    metadata_title = " ".join((metadata_title or "").split())
+    reasonable = len(metadata_title.split()) >= 3 and not FILENAME_RE.search(metadata_title)
+    if reasonable:
+        shown = fuzz.partial_ratio(
+            normalize_for_match(metadata_title), normalize_for_match(front_text)
         )
-        if len(title) >= 15:
-            return title[:400]
-    if (
-        metadata_title
-        and len(metadata_title) >= 15
-        and "microsoft word" not in metadata_title.lower()
-    ):
-        return metadata_title
-    return None
+        if shown >= 90:
+            return metadata_title[:400]
+    for page in list(doc)[:TITLE_PAGES]:
+        if title := _layout_title(page):
+            return title
+    return metadata_title[:400] if reasonable else None
 
 
 def _ocr_pages(doc: pymupdf.Document, languages: list[str]) -> list[str]:
@@ -137,7 +214,7 @@ def extract(path: Path, ocr_languages: list[str] | None = None) -> Extraction:
         return Extraction(
             pages=pages,
             front_text="\n".join(plain[:FRONT_PAGES]),
-            title_guess=_title_guess(doc[0], info.get("title")),
+            title_guess=_title_guess(doc, info.get("title"), "\n".join(plain[:TITLE_PAGES])),
             metadata_text=metadata_text,
             ocr=scanned,
             warnings=warnings,

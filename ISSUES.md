@@ -9,7 +9,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 3 | alta | No hay forma de corregir metadatos sin DOI | ✅ resuelto |
 | 4 | media | Nunca se extraen los autores de PDFs sin DOI | ✅ resuelto |
 | 5 | media | El año sale de cualquier número de 4 cifras | ✅ resuelto |
-| 6 | media | El título se toma de la letra más grande de la p. 1 | pendiente |
+| 6 | media | El título se toma de la letra más grande de la p. 1 | ✅ resuelto |
 | 7 | media | Caracteres de fuentes matemáticas (CO₂ → "CCCC") | pendiente |
 | 8 | media | No se aprovechan identificadores de la página (SSRN) | pendiente |
 | 9 | media | Con DOI, Crossref sustituye todo el .bib, incluso con vacíos | pendiente |
@@ -74,6 +74,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
   - En tesis pega el nombre de la autora: "…A Dissertation Presented DIANA ANDREA BRITO PICCIOTTO".
   - Toma el encabezado de la institución: "UNIVERSIDAD AUTÓNOMA DE NUEVO LEÓN".
 - **Propuesta:** revisar las páginas 1 a 3, saltar avisos conocidos, cortar el título en "by", "por", "A Dissertation" o "Tesis", y usar el título de los metadatos del PDF cuando sea razonable.
+- **Resolución:** `_title_guess` trabaja por líneas en las páginas 1 a 3: salta avisos (preprint, manuscript, ISSN…) y encabezados de institución, toma el primer bloque contiguo en la letra más grande, corta en "A Dissertation", "Tesis que…", "Presentada por" y en "by/por" solo si sigue un nombre, y acepta títulos cortos de dos palabras. Usa el título de los metadatos del PDF cuando es un título real y aparece en las primeras páginas.
 
 ### 7. Caracteres de fuentes matemáticas
 
