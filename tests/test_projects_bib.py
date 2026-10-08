@@ -259,3 +259,17 @@ def test_preprint_from_crossref_is_misc_with_its_server():
 def test_article_without_journal_is_misc():
     text = bibtex.entry(make_paper(type="article", container_title=None))
     assert text.startswith("@misc{") and "journal" not in text
+
+
+def test_lowercase_names_from_crossref_are_capitalized():
+    from second_brain.ingest.metadata import crossref_fields, name_case
+
+    fields = crossref_fields(
+        {"title": ["X"], "author": [{"family": "liu", "given": "yongping"},
+                                    {"family": "de la cruz-garcía", "given": "j. a."},
+                                    {"family": "McDonald", "given": "IPCC"}]}
+    )  # fmt: skip
+    assert [(a["family"], a["given"]) for a in fields["authors"]] == [
+        ("Liu", "Yongping"), ("de la Cruz-García", "J. A."), ("McDonald", "IPCC"),
+    ]  # fmt: skip
+    assert name_case("o'brien") == "O'Brien" and name_case(None) is None

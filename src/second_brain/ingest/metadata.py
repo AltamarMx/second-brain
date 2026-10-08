@@ -127,6 +127,43 @@ def _abstract(raw: str | None) -> str | None:
     return "\n\n".join(paragraphs) or None
 
 
+PARTICLES = {
+    "de",
+    "del",
+    "la",
+    "las",
+    "los",
+    "da",
+    "das",
+    "do",
+    "dos",
+    "di",
+    "du",
+    "van",
+    "von",
+    "der",
+    "den",
+    "ter",
+    "y",
+}
+
+
+def name_case(name: str | None) -> str | None:
+    """Capitalize a name that comes all in lowercase ("liu" → "Liu", "garcía-lópez" →
+    "García-López", "de la cruz" → "de la Cruz"); any other casing is left as it is."""
+    if not name or name != name.lower() or not any(c.isalpha() for c in name):
+        return name
+    words = name.split()
+
+    def cap(word: str) -> str:
+        return re.sub(r"(^|[-'’.])(\w)", lambda m: m.group(1) + m.group(2).upper(), word)
+
+    return " ".join(
+        word if word in PARTICLES and i < len(words) - 1 else cap(word)
+        for i, word in enumerate(words)
+    )
+
+
 def crossref_fields(message: dict[str, Any]) -> dict[str, Any]:
     """Map a Crossref ``work`` to ``Paper`` fields (without citekey, dates or status)."""
     authors = []
@@ -135,8 +172,8 @@ def crossref_fields(message: dict[str, Any]) -> dict[str, Any]:
         if author.get("family"):
             authors.append(
                 {
-                    "family": author["family"],
-                    "given": author.get("given"),
+                    "family": name_case(author["family"]),
+                    "given": name_case(author.get("given")),
                     "orcid": orcid.rsplit("/", 1)[-1] if orcid else None,
                 }
             )
@@ -228,7 +265,12 @@ def datacite_fields(attributes: dict[str, Any]) -> dict[str, Any]:
     authors = []
     for creator in attributes.get("creators", []):
         if creator.get("familyName"):
-            authors.append({"family": creator["familyName"], "given": creator.get("givenName")})
+            authors.append(
+                {
+                    "family": name_case(creator["familyName"]),
+                    "given": name_case(creator.get("givenName")),
+                }
+            )
         elif creator.get("name"):
             authors.append({"family": creator["name"]})
     titles = attributes.get("titles") or [{}]

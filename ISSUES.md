@@ -14,7 +14,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 8 | media | No se aprovechan identificadores de la página (SSRN) | ✅ resuelto |
 | 9 | media | Con DOI, Crossref sustituye todo el .bib, incluso con vacíos | ✅ resuelto |
 | 10 | media | Los preprints salen como `@article` sin revista | ✅ resuelto |
-| 11 | media | Nombres en minúsculas desde Crossref | pendiente |
+| 11 | media | Nombres en minúsculas desde Crossref | ✅ resuelto |
 | 12 | media | Lo que viene de Zotero pierde sus metadatos y PDFs | pendiente |
 | 13 | media | Mensaje de error de descarga engañoso | pendiente |
 | 14 | media | `sb pdf get --json` informa un estado que no es el del registro | pendiente |
@@ -107,6 +107,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 
 - **Evidencia:** "liu, yongping" pasa tal cual a BibTeX.
 - **Propuesta:** capitalizar los nombres que vengan completamente en minúsculas.
+- **Resolución:** `name_case` capitaliza los nombres que Crossref o DataCite dan completamente en minúsculas ("liu, yongping" → "Liu, Yongping"; guiones, apóstrofos e iniciales incluidos; partículas como "de la" o "van der" quedan en minúscula). Cualquier otra forma se respeta (McDonald, IPCC). Para los ya registrados: `sb edit KEY --from-doi DOI` o `--author`.
 
 ### 12. Lo que viene de Zotero pierde sus metadatos
 

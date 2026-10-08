@@ -42,3 +42,4 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - Los PDFs de SSRN se identifican por su DOI (`ssrn.com/abstract=N` → `10.2139/ssrn.N`), validado con Crossref.
 - `sb import bib` ya no borra campos del .bib cuando Crossref no los trae; `--prefer-bib` hace que ganen los del .bib y Crossref solo llene huecos.
 - Los preprints (Crossref `posted-content`) tienen el tipo `preprint` y se exportan como `@misc` con su servidor (`howpublished = {SSRN}`) en lugar de `@article` sin revista.
+- Los nombres de autor que Crossref o DataCite dan en minúsculas se capitalizan ("liu, yongping" → "Liu, Yongping").
