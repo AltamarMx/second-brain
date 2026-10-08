@@ -13,7 +13,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 7 | media | Caracteres de fuentes matemáticas (CO₂ → "CCCC") | ✅ resuelto |
 | 8 | media | No se aprovechan identificadores de la página (SSRN) | ✅ resuelto |
 | 9 | media | Con DOI, Crossref sustituye todo el .bib, incluso con vacíos | ✅ resuelto |
-| 10 | media | Los preprints salen como `@article` sin revista | pendiente |
+| 10 | media | Los preprints salen como `@article` sin revista | ✅ resuelto |
 | 11 | media | Nombres en minúsculas desde Crossref | pendiente |
 | 12 | media | Lo que viene de Zotero pierde sus metadatos y PDFs | pendiente |
 | 13 | media | Mensaje de error de descarga engañoso | pendiente |
@@ -101,6 +101,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Dónde:** el tipo `posted-content` de Crossref se convierte en `article` (`ingest/metadata.py`).
 - **Evidencia:** `sb bib` exporta `kyaw2024influences` como `@article` sin `journal`, lo que provoca una advertencia en BibTeX, y no dice que es de SSRN.
 - **Propuesta:** un tipo preprint que se exporte como `@misc` o `@online` con `howpublished = {SSRN}`.
+- **Resolución:** Tipo `preprint` (Crossref `posted-content`, DataCite `Preprint`) con el servidor (`group-title`: "SSRN") en `container_title`. `sb bib` lo exporta como `@misc` con `howpublished = {SSRN}` y `note = {Preprint}`; un `article` genérico sin revista también sale como `@misc`. Para los ya registrados: `sb edit KEY --from-doi DOI` trae el tipo y el servidor.
 
 ### 11. Nombres en minúsculas desde Crossref
 

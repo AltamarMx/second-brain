@@ -237,3 +237,25 @@ def test_math_alphanumerics_are_plain_letters():
         bibtex.protect_title("Monitor de 𝑪𝑶₂ para interiores", "bibtex")
         == "Monitor de {CO2} para interiores"
     )
+
+
+def test_preprint_from_crossref_is_misc_with_its_server():
+    from second_brain.ingest.metadata import crossref_fields
+
+    fields = crossref_fields({
+        "DOI": "10.2139/ssrn.4856145", "type": "posted-content", "subtype": "preprint",
+        "title": ["Influences of BIM-LOD on embodied emissions"], "publisher": "Elsevier BV",
+        "group-title": "SSRN", "container-title": [], "issued": {"date-parts": [[2024]]},
+    })  # fmt: skip
+    assert (fields["type"], fields["container_title"]) == ("preprint", "SSRN")
+    paper = make_paper("kyaw2024influences", **{k: fields[k] for k in ("type", "container_title")})
+    for fmt in ("bibtex", "biblatex"):
+        text = bibtex.entry(paper, fmt)
+        assert text.startswith("@misc{kyaw2024influences,")
+        assert "howpublished = {SSRN}" in text and "note = {Preprint}" in text
+        assert "journal" not in text
+
+
+def test_article_without_journal_is_misc():
+    text = bibtex.entry(make_paper(type="article", container_title=None))
+    assert text.startswith("@misc{") and "journal" not in text

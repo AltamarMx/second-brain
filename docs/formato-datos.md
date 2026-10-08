@@ -42,7 +42,7 @@ Versión del esquema: **4** (la 2 agregó `aliases`; la 3, `reading`, `rating`, 
 |---|---|---|
 | `schema_version` | entero | `1` |
 | `citekey` | texto | Ver identificadores |
-| `type` | texto | Tipo CSL: `article-journal`, `paper-conference`, `chapter`, `book`, `thesis`, `report`… |
+| `type` | texto | Tipo CSL: `article-journal`, `paper-conference`, `chapter`, `book`, `thesis`, `report`…, y `preprint` (Crossref `posted-content`; su servidor, p. ej. SSRN, va en `container_title`). `sb bib` exporta los preprints como `@misc` con `howpublished` |
 | `doi` | texto o null | |
 | `ids` | mapa | `arxiv`, `isbn`, `openalex` (texto o null) |
 | `aliases` | lista de texto | Otras claves con las que tus `.tex` citan este artículo (de `sb import bib`). `sb bib` también escribe la entrada con cada alias. Únicos en la biblioteca y distintos de cualquier citekey |

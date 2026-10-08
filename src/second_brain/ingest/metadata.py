@@ -36,7 +36,7 @@ CROSSREF_TYPES = {
     "report": "report",
     "report-component": "report",
     "standard": "standard",
-    "posted-content": "article",
+    "posted-content": "preprint",
     "dataset": "dataset",
 }
 
@@ -150,7 +150,8 @@ def crossref_fields(message: dict[str, Any]) -> dict[str, Any]:
         "title": _first(message.get("title")) or "(sin título)",
         "authors": authors,
         "year": _year(message),
-        "container_title": _first(message.get("container-title")),
+        # a preprint has no journal: its server ("SSRN", "Research Square") is the group title
+        "container_title": _first(message.get("container-title")) or message.get("group-title"),
         "volume": message.get("volume"),
         "issue": message.get("issue"),
         "pages": message.get("page") or message.get("article-number"),
@@ -243,6 +244,7 @@ def datacite_fields(attributes: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": {
             "Dissertation": "thesis",
+            "Preprint": "preprint",
             "Report": "report",
             "Book": "book",
             "Dataset": "dataset",

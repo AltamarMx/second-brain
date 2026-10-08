@@ -25,6 +25,7 @@ BIBTEX_TYPES = {
     "book": "book",
     "thesis": "phdthesis",
     "report": "techreport",
+    "preprint": "misc",
 }
 BIBLATEX_TYPES = {
     **BIBTEX_TYPES,
@@ -113,6 +114,8 @@ def entry(paper: Paper, fmt: Format = "bibtex", key: str | None = None) -> str:
     types = BIBTEX_TYPES if fmt == "bibtex" else BIBLATEX_TYPES
     kind = types.get(paper.type, "misc")
     container = encode(paper.container_title, fmt) if paper.container_title else None
+    if paper.type == "article" and not container:  # generic CSL "article" (older preprints)
+        kind = "misc"
     fields: list[tuple[str, str | None]] = [
         ("author", format_authors(paper, fmt)),
         ("title", protect_title(paper.title, fmt)),
@@ -122,7 +125,7 @@ def entry(paper: Paper, fmt: Format = "bibtex", key: str | None = None) -> str:
     elif kind in ("inproceedings", "incollection"):
         fields.append(("booktitle", container))
     elif kind == "misc" and container:
-        fields.append(("howpublished", container))
+        fields.append(("howpublished", container))  # a preprint's server: SSRN, arXiv…
     fields += [
         ("year", str(paper.year) if paper.year else None),
         ("volume", encode(paper.volume, fmt) if paper.volume else None),
@@ -140,6 +143,8 @@ def entry(paper: Paper, fmt: Format = "bibtex", key: str | None = None) -> str:
             fields.append(("type", "techreport"))
     elif kind != "article":
         fields.append(("publisher", publisher))
+    if paper.type == "preprint":
+        fields.append(("note", "Preprint"))
     fields += [("doi", paper.doi), ("isbn", paper.ids.isbn)]
     if not paper.authors:  # lets BibTeX sort entries without author
         fields.append(("key", paper.citekey))
