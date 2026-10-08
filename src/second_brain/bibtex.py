@@ -49,12 +49,31 @@ _SPECIAL = {
 _WORD_CORE = re.compile(r"[\w'’-]+", re.UNICODE)
 
 
-def encode(text: str, fmt: Format) -> str:
-    """BibTeX: everything to LaTeX commands (``{\\'e}``); BibLaTeX: UTF-8, only specials escaped."""
-    text = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text)).strip()  # 𝑪𝑶₂ → CO2
+SUBSCRIPTS, SUPERSCRIPTS = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾"
+_SCRIPTS_RE = re.compile(f"([{SUBSCRIPTS}]+)|([{SUPERSCRIPTS}]+)")
+_SCRIPT_TEXT = str.maketrans(SUBSCRIPTS + SUPERSCRIPTS, "0123456789+-=()" * 2)
+
+
+def _encode_plain(text: str, fmt: Format) -> str:
+    text = unicodedata.normalize("NFKC", text)  # 𝑪𝑶 → CO
     if fmt == "bibtex":
         return unicode_to_latex(text, unknown_char_policy="keep")
     return "".join(_SPECIAL.get(c, c) for c in text)
+
+
+def encode(text: str, fmt: Format) -> str:
+    """BibTeX: everything to LaTeX commands (``{\\'e}``); BibLaTeX: UTF-8, only specials escaped.
+    In both, sub- and superscripts become ``\\textsubscript``/``\\textsuperscript`` (CO₂,
+    m²): pdfLaTeX cannot typeset the Unicode ones."""
+    text = re.sub(r"\s+", " ", text).strip()
+    parts, position = [], 0
+    for match in _SCRIPTS_RE.finditer(text):
+        parts.append(_encode_plain(text[position : match.start()], fmt))
+        command = "textsubscript" if match.group(1) else "textsuperscript"
+        parts.append(f"\\{command}{{{match.group(0).translate(_SCRIPT_TEXT)}}}")
+        position = match.end()
+    parts.append(_encode_plain(text[position:], fmt))
+    return "".join(parts)
 
 
 def _is_sentence_case(words: list[str]) -> bool:

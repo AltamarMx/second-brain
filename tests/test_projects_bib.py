@@ -233,9 +233,13 @@ def test_bib_sync_and_check_warning(lib, tmp_path):
 
 
 def test_math_alphanumerics_are_plain_letters():
-    assert (
-        bibtex.protect_title("Monitor de 𝑪𝑶₂ para interiores", "bibtex")
-        == "Monitor de {CO2} para interiores"
+    for fmt in ("bibtex", "biblatex"):  # and the subscript survives
+        assert (
+            bibtex.protect_title("Monitor de 𝑪𝑶₂ para interiores", fmt)
+            == r"Monitor de {CO\textsubscript{2}} para interiores"
+        )
+    assert bibtex.encode("Flujo de 5 W/m² y H₂O", "biblatex") == (
+        r"Flujo de 5 W/m\textsuperscript{2} y H\textsubscript{2}O"
     )
 
 

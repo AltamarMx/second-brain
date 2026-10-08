@@ -20,7 +20,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 14 | media | `sb pdf get --json` informa un estado que no es el del registro | ✅ resuelto |
 | 15 | media | No hay forma de completar los PDFs locales desde una carpeta | ✅ resuelto |
 | 16 | baja | El grado de las tesis no se distingue | ✅ resuelto |
-| 17 | baja | Se pierde el subíndice de CO₂ en BibTeX | pendiente |
+| 17 | baja | Se pierde el subíndice de CO₂ en BibTeX | ✅ resuelto |
 | 18 | baja | Las llaves de protección incluyen la puntuación (`{IoT,}`) | pendiente |
 | 19 | baja | Prefijos de commit inconsistentes | pendiente |
 | 20 | baja | `sb list --reading por-leer` devuelve 0 | pendiente |
@@ -148,6 +148,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 ### 17. Se pierde el subíndice de CO₂
 
 - La normalización Unicode de `encode` (`bibtex.py`) lo convierte en `{CO2}`. **Propuesta:** exportarlo como `CO\textsubscript{2}`.
+- **Resolución:** `encode` convierte las rachas de subíndices y superíndices en `\textsubscript{…}`/`\textsuperscript{…}` antes de normalizar el resto, en BibTeX y en BibLaTeX (pdfLaTeX no compone los caracteres Unicode): `{CO\textsubscript{2}}`, `W/m\textsuperscript{2}`.
 
 ### 18. Las llaves de protección incluyen la puntuación
 
