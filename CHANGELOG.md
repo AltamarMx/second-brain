@@ -39,3 +39,4 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - El año de los PDFs sin DOI ya no sale de un ISSN, ISBN, teléfono o DOI, y prefiere el de ©, "published", la línea de cita de la revista o las fechas.
 - El título de los PDFs sin DOI salta avisos de portada y encabezados de institución, corta el nombre del autor en tesis, revisa las páginas 1 a 3 y usa el título de los metadatos del PDF cuando aparece en el texto.
 - Las ecuaciones de Word (p. ej. CO₂ escrito como fórmula) ya no salen como "CCCC": se repara en memoria el mapa ToUnicode de la fuente matemática y las letras matemáticas se guardan como texto plano.
+- Los PDFs de SSRN se identifican por su DOI (`ssrn.com/abstract=N` → `10.2139/ssrn.N`), validado con Crossref.

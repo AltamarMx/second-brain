@@ -11,7 +11,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 5 | media | El año sale de cualquier número de 4 cifras | ✅ resuelto |
 | 6 | media | El título se toma de la letra más grande de la p. 1 | ✅ resuelto |
 | 7 | media | Caracteres de fuentes matemáticas (CO₂ → "CCCC") | ✅ resuelto |
-| 8 | media | No se aprovechan identificadores de la página (SSRN) | pendiente |
+| 8 | media | No se aprovechan identificadores de la página (SSRN) | ✅ resuelto |
 | 9 | media | Con DOI, Crossref sustituye todo el .bib, incluso con vacíos | pendiente |
 | 10 | media | Los preprints salen como `@article` sin revista | pendiente |
 | 11 | media | Nombres en minúsculas desde Crossref | pendiente |
@@ -85,6 +85,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 
 - **Evidencia:** la p. 1 de Kyaw et al. dice `ssrn.com/abstract=4856145`, y el DOI `10.2139/ssrn.4856145` existe en Crossref.
 - **Propuesta:** derivar el DOI candidato de los identificadores de SSRN (y de Redalyc, cuando aplique) y validarlo con Crossref.
+- **Resolución:** `find_ssrn_doi` convierte `ssrn.com/abstract=N` (o `abstract_id=N`) en el candidato `10.2139/ssrn.N`, que se valida con Crossref como los demás y se prueba antes que los DOIs de las referencias. Con el PDF real de Kyaw et al. da `10.2139/ssrn.4856145`. Redalyc no tiene un DOI derivable de su id (los DOIs, si existen, son de cada revista), así que no aplica.
 
 ## Prioridad media: importación y Crossref
 

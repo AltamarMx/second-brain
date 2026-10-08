@@ -216,6 +216,18 @@ def test_publication_year(text, year):
     assert publication_year(text, TODAY) == year
 
 
+def test_ssrn_id_on_the_page_gives_the_doi(lib):
+    ssrn_doi = "10.2139/ssrn.4856145"
+    make_pdf(
+        lib.inbox_dir / "kyaw.pdf",
+        doi_line="Electronic copy available at: https://ssrn.com/abstract=4856145",
+    )
+    services = FakeServices(works={ssrn_doi: crossref_message(doi=ssrn_doi)})
+    [result] = run(lib, services)
+    assert result.outcome == "ingested", result.message
+    assert lib.read_paper(result.citekey).meta.doi == ssrn_doi
+
+
 def test_forced_doi(lib):
     make_pdf(lib.inbox_dir / "a.pdf", doi_line=None)
     [result] = run(lib, FakeServices(), forced_doi=f"https://doi.org/{DOI.upper()}")

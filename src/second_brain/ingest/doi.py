@@ -7,6 +7,10 @@ import re
 # Pattern recommended by Crossref for modern DOIs.
 DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.IGNORECASE)
 ARXIV_RE = re.compile(r"arxiv[:\s]*(\d{4}\.\d{4,5})(?:v\d+)?", re.IGNORECASE)
+# SSRN papers carry "ssrn.com/abstract=4856145" (or "abstract_id="); their DOI is 10.2139/ssrn.N
+SSRN_RE = re.compile(
+    r"ssrn\.com/(?:abstract|sol3/papers\.cfm\?abstract_id)=(\d{5,9})", re.IGNORECASE
+)
 _DOI_CONTEXT_RE = re.compile(r"(doi|doi\.org)\W{0,6}$", re.IGNORECASE)
 # A DOI wrapped at the end of a line: "10.1016/j.buildenv.\n2018.12.011"
 _WRAPPED_RE = re.compile(r"(10\.\d{4,9}/\S*[./_-])\s*\n\s*(?=[A-Za-z0-9])")
@@ -66,3 +70,8 @@ def find_dois(text: str) -> list[str]:
 def find_arxiv(text: str) -> str | None:
     match = ARXIV_RE.search(text)
     return match.group(1) if match else None
+
+
+def find_ssrn_doi(text: str) -> str | None:
+    match = SSRN_RE.search(text)
+    return f"10.2139/ssrn.{match.group(1)}" if match else None

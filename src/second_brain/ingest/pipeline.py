@@ -30,7 +30,7 @@ from ..models import FullText, Paper, PdfInfo, PdfSource, Provenance
 from ..projects import ProjectError, require_project
 from ..textutil import normalize_for_match
 from .dedupe import LibraryIndex
-from .doi import doi_variants, find_arxiv, find_dois, normalize_doi
+from .doi import doi_variants, find_arxiv, find_dois, find_ssrn_doi, normalize_doi
 from .extract import Extraction, ExtractionError, extract, extractor_id, fulltext_body, sha256_file
 from .metadata import (
     MetadataClient,
@@ -380,7 +380,15 @@ class Ingestor:
                 note="" if ok else "DOI indicado a mano; el título no aparece en la página 1",
             )  # fmt: skip
 
-        candidates = find_dois(extraction.metadata_text) + find_dois(extraction.front_text)
+        on_page = find_dois(extraction.front_text)
+        # an SSRN id ("ssrn.com/abstract=N") gives a DOI; try it before references' DOIs
+        ssrn = find_ssrn_doi(extraction.front_text + " " + extraction.metadata_text)
+        candidates = (
+            find_dois(extraction.metadata_text)
+            + on_page[:3]
+            + ([ssrn] if ssrn else [])
+            + on_page[3:]
+        )
         arxiv = find_arxiv(extraction.front_text)
         if arxiv:
             candidates.append(f"10.48550/arXiv.{arxiv}")
