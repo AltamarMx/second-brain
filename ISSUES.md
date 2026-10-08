@@ -4,7 +4,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 
 | # | Prioridad | Issue | Estado |
 |---|---|---|---|
-| 1 | alta | `sb ingest RUTA` borra el original fuera de `inbox/` | pendiente |
+| 1 | alta | `sb ingest RUTA` borra el original fuera de `inbox/` | ✅ resuelto |
 | 2 | alta | Un PDF de otra versión impide colocar después el original | pendiente |
 | 3 | alta | No hay forma de corregir metadatos sin DOI | pendiente |
 | 4 | media | Nunca se extraen los autores de PDFs sin DOI | pendiente |
@@ -32,6 +32,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Dónde:** `_move_verified` (`ingest/pipeline.py`) copia, verifica y hace `src.unlink()`. Se llama desde cinco lugares sin comprobar de dónde viene el archivo. `_set_aside` sí comprueba que esté en `inbox/`; mover no.
 - **Riesgo:** `sb ingest ~/Zotero/storage/ABC/x.pdf` elimina el PDF de Zotero y rompe su adjunto. Se evitó copiando antes a `inbox/` los 59 PDFs tomados de Zotero.
 - **Propuesta:** mover solo si el archivo está en `inbox/`; en cualquier otra ruta, copiar.
+- **Resolución:** `store_pdf` mueve a `pdfs/` solo lo que viene de `inbox/`; lo de cualquier otra ruta se copia y queda intacto. Vale para `sb ingest` y `sb attach`.
 
 ### 2. Un PDF de otra versión impide colocar después el original
 

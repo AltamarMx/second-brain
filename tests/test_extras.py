@@ -165,7 +165,7 @@ def test_attach_supplement_is_searchable_and_deduplicated(lib, tmp_path):
     )
     content = pdf.read_bytes()
     supplement = attach(lib, load_config(lib.home), "garcia2021thermal", pdf, label="Datos")
-    assert supplement.id == "s1" and not pdf.exists()
+    assert supplement.id == "s1" and pdf.exists()  # outside inbox/: copied, never deleted
     assert lib.supplement_pdf("garcia2021thermal", "s1").is_file()
     assert lib.read_paper("garcia2021thermal").meta.supplements[0].label == "Datos"
     found = SearchIndex(lib).passages("sargassum monitoring", Filters())

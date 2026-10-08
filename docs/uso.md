@@ -92,7 +92,7 @@ Para cada PDF, `sb`:
 2. Extrae el texto con marcas de página (OCR con Tesseract si está escaneado).
 3. Busca el DOI en los metadatos del PDF y en sus dos primeras páginas, y lo confirma en Crossref (o DataCite) comprobando que el título aparezca en la página 1.
 4. Sin DOI confirmado, busca el título en Crossref. Si tampoco hay suerte, usa lo que dice el PDF. En ambos casos el artículo queda en `needs_review`.
-5. Escribe `library/papers/KEY.md` y `library/fulltext/KEY.md`, y mueve el PDF a `pdfs/KEY.pdf`.
+5. Escribe `library/papers/KEY.md` y `library/fulltext/KEY.md`, y lleva el PDF a `pdfs/KEY.pdf`: lo mueve si estaba en `inbox/` y lo copia si viene de otra carpeta (p. ej. `~/Zotero/storage`), que nunca se toca.
 
 | Resultado | Significado |
 |---|---|
@@ -242,7 +242,7 @@ Necesita OpenCode (`brew install opencode`), Ollama abierto y `[llm].model` en e
 - **Lectura:** `sb read KEY --status leido --rating 4`; luego `sb list --reading por-leer`.
 - **Retractaciones:** cada artículo con DOI guarda las notas que Crossref reporta (retracciones, correcciones, notas de preocupación, con datos de Retraction Watch). `sb check --retractions` vuelve a consultarlas; un artículo retractado queda marcado en `sb show` y los agentes lo advierten al citarlo.
 - **Citas:** `sb refs KEY` muestra a quién cita y quién lo cita dentro de tu biblioteca; `sb refs --missing` lista obras que citan dos o más de tus artículos y no tienes; `sb refs --html` guarda el grafo como página interactiva en `.cache/grafo.html` (fuera de git, se regenera en segundos) y la abre en el navegador; `-o RUTA` la guarda en otro lugar y `--no-open` no la abre. La página trae una línea de tiempo: ▶ reproduce el grafo por año de publicación y el control deslizante lo deja en un año; los artículos sin `year` no se animan (están siempre visibles, con borde naranja punteado y en la lista de pendientes) hasta que se complete `year:` en su ficha. Usa las referencias que publica Crossref.
-- **Suplementos:** `sb attach KEY datos.pdf --label "Datos de monitoreo"`. El texto queda en `library/supplements/` y aparece en las búsquedas; el PDF, en `pdfs/KEY--s1.pdf`.
+- **Suplementos:** `sb attach KEY datos.pdf --label "Datos de monitoreo"`. El texto queda en `library/supplements/` y aparece en las búsquedas; el PDF, en `pdfs/KEY--s1.pdf` (copiado si estaba fuera de `inbox/`).
 - **Más campos de clasificación:** defínelos en `config.toml` (hay ejemplos comentados: clima Köppen, tipo de edificación, escala), luego `sb process --reclassify` para los artículos ya procesados y filtra con `sb list --field clima=Aw`.
 
 ## Usar `sb` desde otra carpeta

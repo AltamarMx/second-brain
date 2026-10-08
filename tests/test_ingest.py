@@ -165,6 +165,17 @@ def test_without_doi_and_no_match_uses_pdf(lib):
     assert result.citekey == "anon2019thermal"
 
 
+def test_pdf_outside_inbox_is_copied_not_moved(lib, tmp_path):
+    (folder := tmp_path / "Zotero" / "storage" / "ABC").mkdir(parents=True)
+    zotero = make_pdf(folder / "x.pdf")
+    [result] = run(lib, FakeServices(), paths=[zotero])
+    assert result.outcome == "ingested", result.message
+    assert zotero.is_file()  # another program's file: left in place
+    assert (lib.pdfs_dir / f"{result.citekey}.pdf").read_bytes() == zotero.read_bytes()
+    [again] = run(lib, FakeServices(), paths=[zotero])
+    assert again.outcome == "duplicate" and zotero.is_file()
+
+
 def test_forced_doi(lib):
     make_pdf(lib.inbox_dir / "a.pdf", doi_line=None)
     [result] = run(lib, FakeServices(), forced_doi=f"https://doi.org/{DOI.upper()}")

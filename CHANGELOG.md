@@ -28,3 +28,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - Esquema de datos 3: `reading`, `rating`, `supplements`, `updates` y `classification.extra`.
 - Esquema de datos 2: `aliases` en los artículos. Los archivos de la versión 1 se siguen leyendo; `sb migrate` los actualiza.
 - BibTeX normaliza letras matemáticas Unicode (𝑪𝑶₂ → CO2).
+
+### Corregido
+
+- `sb ingest RUTA` y `sb attach` ya no borran el PDF original cuando está fuera de `inbox/` (p. ej. un adjunto de Zotero): lo copian.

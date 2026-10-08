@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .config import LibraryConfig
 from .ingest.extract import extract, extractor_id, fulltext_body, sha256_file
-from .ingest.pipeline import _move_verified
+from .ingest.pipeline import store_pdf
 from .library import Library
 from .models import Supplement, SupplementText
 
@@ -62,5 +62,5 @@ def attach(
     lib.write_paper(
         paper.model_copy(update={"supplements": [*paper.supplements, supplement]}), doc.body
     )
-    _move_verified(pdf, lib.supplement_pdf(citekey, supplement.id), sha)
+    store_pdf(lib, pdf, lib.supplement_pdf(citekey, supplement.id), sha)
     return supplement

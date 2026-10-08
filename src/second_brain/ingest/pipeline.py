@@ -115,21 +115,28 @@ def ingest_lock(lib: Library) -> Iterator[None]:
         yield
 
 
-def _move_verified(src: Path, dest: Path, sha256: str) -> None:
-    """Copy, verify the hash, then delete the original. Never loses the PDF."""
+def _move_verified(src: Path, dest: Path, sha256: str, keep_source: bool = False) -> None:
+    """Copy, verify the hash, then delete the original (unless ``keep_source``). Never loses the PDF."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         if sha256_file(dest) != sha256:
             raise IngestError(f"{dest.name} ya existe con otro contenido")
+    else:
+        tmp = dest.with_name(f".{dest.name}.tmp")
+        shutil.copy2(src, tmp)
+        if sha256_file(tmp) != sha256:
+            tmp.unlink()
+            raise IngestError("la copia del PDF no coincide con el original")
+        os.replace(tmp, dest)
+    if not keep_source:
         src.unlink()
-        return
-    tmp = dest.with_name(f".{dest.name}.tmp")
-    shutil.copy2(src, tmp)
-    if sha256_file(tmp) != sha256:
-        tmp.unlink()
-        raise IngestError("la copia del PDF no coincide con el original")
-    os.replace(tmp, dest)
-    src.unlink()
+
+
+def store_pdf(lib: Library, src: Path, dest: Path, sha256: str) -> None:
+    """Put a PDF in ``pdfs/``: moved if it came from ``inbox/``, copied from anywhere else, so
+    files that belong to other programs (a Zotero attachment…) are never deleted."""
+    from_inbox = src.resolve().is_relative_to(lib.inbox_dir.resolve())
+    _move_verified(src, dest, sha256, keep_source=not from_inbox)
 
 
 def _unique_destination(directory: Path, name: str) -> Path:
@@ -227,7 +234,7 @@ class Ingestor:
                     f"suplemento {supplement_id} de {citekey} re-vinculado",
                 )
                 if not self.options.dry_run:
-                    _move_verified(path, local, sha)
+                    store_pdf(self.lib, path, local, sha)
             return result
 
         extraction = extract(path, ocr_languages=self.config.extract.ocr_languages)
@@ -289,7 +296,7 @@ class Ingestor:
         if not self.options.dry_run:
             self.lib.write_fulltext(fulltext, body)
             self.lib.write_paper(paper)
-            _move_verified(path, self.lib.pdfs_dir / f"{citekey}.pdf", sha)
+            store_pdf(self.lib, path, self.lib.pdfs_dir / f"{citekey}.pdf", sha)
         self.index.add(paper)
 
         result.outcome = "ingested" if status == "needs_processing" else "review"
@@ -417,7 +424,7 @@ class Ingestor:
             result.outcome = "relinked"
             result.message = f"PDF de {citekey} re-vinculado"
             if not self.options.dry_run:
-                _move_verified(path, local, self.index.papers[citekey].pdf.sha256)
+                store_pdf(self.lib, path, local, self.index.papers[citekey].pdf.sha256)
         return result
 
     def _known_doi(
@@ -457,7 +464,7 @@ class Ingestor:
                     body,
                 )  # fmt: skip
                 self.lib.write_paper(updated, self.lib.read_paper(citekey).body)
-                _move_verified(path, local, sha)
+                store_pdf(self.lib, path, local, sha)
             self.index.add(updated)
             result.outcome, result.message = "attached", f"PDF añadido a {citekey}"
         elif not local.exists():
@@ -465,7 +472,7 @@ class Ingestor:
             updated = paper.model_copy(update={"flags": flags})
             if not self.options.dry_run:
                 self.lib.write_paper(updated, self.lib.read_paper(citekey).body)
-                _move_verified(path, local, sha)
+                store_pdf(self.lib, path, local, sha)
             self.index.add(updated)
             result.outcome = "relinked"
             result.message = (
