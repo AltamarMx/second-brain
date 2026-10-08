@@ -22,7 +22,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 16 | baja | El grado de las tesis no se distingue | ✅ resuelto |
 | 17 | baja | Se pierde el subíndice de CO₂ en BibTeX | ✅ resuelto |
 | 18 | baja | Las llaves de protección incluyen la puntuación (`{IoT,}`) | ✅ resuelto |
-| 19 | baja | Prefijos de commit inconsistentes | pendiente |
+| 19 | baja | Prefijos de commit inconsistentes | ✅ resuelto |
 | 20 | baja | `sb list --reading por-leer` devuelve 0 | pendiente |
 
 ## Prioridad alta: riesgo de perder archivos o bloqueos
@@ -158,6 +158,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 ### 19. Prefijos de commit inconsistentes
 
 - La regla 11 de `AGENTS.md` solo menciona `ingest:`, `project:` y `process:`, pero las instrucciones de actualización (`docs/uso.md`) usan `agents:`.
+- **Resolución:** La regla 11 de `AGENTS.md` lista todos los prefijos en uso: `ingest:`, `process:`, `edit:` (nuevo, para `sb edit`), `project:`, `agents:` (el de las instrucciones de actualización), y aclara que `sb ingest --all` usa `ingest/process:`.
 
 ### 20. `sb list --reading por-leer` devuelve 0
 

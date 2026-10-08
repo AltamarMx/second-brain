@@ -23,7 +23,7 @@ Este repositorio es una biblioteca personal de artículos científicos. Se manej
 8. Si una descarga falla por acceso, pide al usuario que active el VPN de su institución; nunca intentes esquivar un bloqueo.
 9. No abras PDFs si existe el texto completo.
 10. Si un artículo tiene el flag `retracted` o `expression_of_concern` (en `sb show`), **avísalo cada vez que lo menciones o lo cites**.
-11. Commits solo cuando el usuario lo pida, con mensajes `ingest: …`, `project: …`, `process: …`.
+11. Commits solo cuando el usuario lo pida, con un prefijo según lo que cambió: `ingest:` (artículos nuevos o importados), `process:` (resúmenes y figuras), `edit:` (metadatos con `sb edit`), `project:` (proyectos), `agents:` (actualizar second-brain y sus reglas). `sb ingest --all` usa `ingest/process:`.
 
 ## Comandos
 
