@@ -21,7 +21,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 15 | media | No hay forma de completar los PDFs locales desde una carpeta | ✅ resuelto |
 | 16 | baja | El grado de las tesis no se distingue | ✅ resuelto |
 | 17 | baja | Se pierde el subíndice de CO₂ en BibTeX | ✅ resuelto |
-| 18 | baja | Las llaves de protección incluyen la puntuación (`{IoT,}`) | pendiente |
+| 18 | baja | Las llaves de protección incluyen la puntuación (`{IoT,}`) | ✅ resuelto |
 | 19 | baja | Prefijos de commit inconsistentes | pendiente |
 | 20 | baja | `sb list --reading por-leer` devuelve 0 | pendiente |
 
@@ -153,6 +153,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 ### 18. Las llaves de protección incluyen la puntuación
 
 - Sale `{IoT,}` en lugar de `{IoT},`.
+- **Resolución:** `protect_title` envuelve solo el núcleo de la palabra y deja fuera la puntuación de los bordes: `{IoT},`, `{BIM-LOD}:`, `({EnergyPlus})`.
 
 ### 19. Prefijos de commit inconsistentes
 

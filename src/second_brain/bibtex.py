@@ -47,6 +47,7 @@ _SPECIAL = {
     "^": r"\textasciicircum{}",
 }
 _WORD_CORE = re.compile(r"[\w'’-]+", re.UNICODE)
+_EDGES_RE = re.compile(r"^(\W*)(.*?)(\W*)$", re.DOTALL)
 
 
 SUBSCRIPTS, SUPERSCRIPTS = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾"
@@ -105,10 +106,12 @@ def protect_title(title: str, fmt: Format) -> str:
     sentence_case = _is_sentence_case(words)
     out = []
     for position, word in enumerate(words):
-        encoded = encode(word, fmt)
-        out.append(
-            f"{{{encoded}}}" if _needs_protection(word, position, sentence_case) else encoded
-        )
+        if not _needs_protection(word, position, sentence_case):
+            out.append(encode(word, fmt))
+            continue
+        # brace the word, not the punctuation around it: {IoT}, and ({CO2})
+        lead, core, trail = _EDGES_RE.match(word).groups()
+        out.append(f"{encode(lead, fmt)}{{{encode(core, fmt)}}}{encode(trail, fmt)}")
     return " ".join(out)
 
 

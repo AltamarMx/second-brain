@@ -89,7 +89,7 @@ def test_article_entry_bibtex():
     assert text.startswith("@article{garcia2021thermal,\n")
     assert r"author = {Garc{\'\i}a-L\'opez, Ana Mar{\'\i}a and Smith, J.}" in text
     assert (
-        r"{M\'exico:}" in text and "{CO2}" in text and "{EnergyPlus}" in text and "{ASHRAE}" in text
+        r"{M\'exico}:" in text and "{CO2}" in text and "{EnergyPlus}" in text and "{ASHRAE}" in text
     )
     assert r"\&" in text
     assert "journal = {Energy \\& Buildings}" in text
@@ -304,3 +304,10 @@ def test_thesis_degree():
         assert text.startswith("@thesis{") and f"type = {{{biblatex_type}}}" in text
     english = make_paper(type="thesis", genre="bachelors", language="en")
     assert "type = {Bachelor's thesis}" in bibtex.entry(english)
+
+
+def test_protection_braces_leave_punctuation_out():
+    title = "Monitor with IoT, self-test and BIM-LOD: (EnergyPlus)"
+    assert bibtex.protect_title(title, "biblatex") == (
+        "Monitor with {IoT}, self-test and {BIM-LOD}: ({EnergyPlus})"
+    )
