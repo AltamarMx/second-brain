@@ -88,13 +88,55 @@ class Resolved:
     note: str = ""
 
 
-def first_year(text: str, today: dt.date | None = None) -> int | None:
-    """First plausible publication year in the text (for records without DOI)."""
+# Numbers that look like years but are not: ISSN (2007-3615), ISBN, phone numbers, DOIs, URLs.
+NOT_YEARS_RE = re.compile(
+    r"\b\d{4}-\d{3}[\dXx]\b"
+    r"|\bISBN[\s:-]*[\d\s-]{10,17}[\dXx]"
+    r"|(?:\+\d{1,3}[\s.-]?)?\(\d{2,3}\)[\s.-]?\d{3,4}[\s.-]?\d{4}"
+    r"|\b(?:tel|phone|fax|teléfono)\b\.?[:\s]*[\d\s()+.-]{7,}"
+    r"|\b10\.\d{4,9}/\S+"
+    r"|\bhttps?://\S+|\bwww\.\S+",
+    re.IGNORECASE,
+)
+_MONTHS = (
+    "jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|"
+    "ene|abr|ago|dic|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|"
+    "octubre|noviembre|diciembre"
+)
+# Context before a year that marks it as the publication year (3) or as a date (2).
+STRONG_BEFORE_RE = re.compile(
+    r"(?:©|\(c\)|copyright|published|publicado|publicación|vol\.?\s*\d+.{0,25}|"
+    r"volume\s*\d+.{0,25}|núm\.?\s*\d+.{0,10})\W{0,3}$",
+    re.IGNORECASE,
+)
+DATE_BEFORE_RE = re.compile(
+    rf"(?:received|recibido|accepted|aceptado|available online|revised|(?:{_MONTHS})[a-z]*\.?)"
+    r"(?:[\s\d,.]|de\b){0,12}$",  # "5 January 2018", "15 de abril de 2023"
+    re.IGNORECASE,
+)
+
+
+def publication_year(text: str, today: dt.date | None = None) -> int | None:
+    """Most likely publication year of a PDF without DOI.
+
+    Years marked as such (©, "published", the journal's citation line) win; then dates
+    (received/accepted, a month name), the latest of them; then the first bare year.
+    """
     last = (today or dt.date.today()).year + 1
-    for match in YEAR_RE.finditer(text):
-        if 1900 <= int(match.group(0)) <= last:
-            return int(match.group(0))
-    return None
+    clean = NOT_YEARS_RE.sub(lambda m: " " * len(m.group(0)), text)
+    scored: list[tuple[int, int]] = []  # (score, year) in order of appearance
+    for match in YEAR_RE.finditer(clean):
+        year = int(match.group(0))
+        if not 1900 <= year <= last:
+            continue
+        before = clean[max(0, match.start() - 40) : match.start()]
+        score = 3 if STRONG_BEFORE_RE.search(before) else 2 if DATE_BEFORE_RE.search(before) else 1
+        scored.append((score, year))
+    if not scored:
+        return None
+    best = max(score for score, _ in scored)
+    years = [year for score, year in scored if score == best]
+    return years[0] if best == 1 else max(years)
 
 
 def title_on_page(title: str, page_text: str) -> bool:
@@ -380,7 +422,7 @@ class Ingestor:
                     )  # fmt: skip
 
         return Resolved(
-            {"title": guess or "(sin título)", "year": first_year(extraction.front_text)},
+            {"title": guess or "(sin título)", "year": publication_year(extraction.front_text)},
             "pdf",
             validated=False,
             note="sin DOI: título y año aproximados tomados del PDF",

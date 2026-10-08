@@ -8,7 +8,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 | 2 | alta | Un PDF de otra versión impide colocar después el original | ✅ resuelto |
 | 3 | alta | No hay forma de corregir metadatos sin DOI | ✅ resuelto |
 | 4 | media | Nunca se extraen los autores de PDFs sin DOI | ✅ resuelto |
-| 5 | media | El año sale de cualquier número de 4 cifras | pendiente |
+| 5 | media | El año sale de cualquier número de 4 cifras | ✅ resuelto |
 | 6 | media | El título se toma de la letra más grande de la p. 1 | pendiente |
 | 7 | media | Caracteres de fuentes matemáticas (CO₂ → "CCCC") | pendiente |
 | 8 | media | No se aprovechan identificadores de la página (SSRN) | pendiente |
@@ -62,6 +62,7 @@ Problemas encontrados al usar `sb` sobre una biblioteca real (octubre de 2026). 
 - **Dónde:** `first_year` (`ingest/pipeline.py`) toma el primer número entre 1900 y el año siguiente al actual.
 - **Evidencia:** `anon2007consumo` quedó con año 2007 por el texto "ISSN: 2007-3615", cuando el mismo PDF dice 2018.
 - **Propuesta:** ignorar los números que siguen a ISSN o ISBN y los teléfonos, y preferir los años cerca de ©, "Received", nombres de mes o la línea de cita de la revista.
+- **Resolución:** `publication_year` (antes `first_year`) descarta ISSN, ISBN, teléfonos, DOIs y URLs, y puntúa por contexto: ©, "published" o la línea de cita ("Vol. 19, núm. 3, 2018") ganan; luego fechas (meses, received/accepted, el año más reciente); al final, el primer año suelto.
 
 ### 6. El título se toma de la letra más grande de la p. 1
 

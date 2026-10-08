@@ -10,7 +10,7 @@ from conftest import make_project
 from second_brain.checks import run_checks
 from second_brain.config import load_config
 from second_brain.ingest.metadata import MetadataClient
-from second_brain.ingest.pipeline import IngestError, IngestOptions, Ingestor
+from second_brain.ingest.pipeline import IngestError, IngestOptions, Ingestor, publication_year
 
 TODAY = dt.date(2026, 10, 4)
 DOI = "10.1234/enb.2021.001"
@@ -196,6 +196,24 @@ def test_pdf_outside_inbox_is_copied_not_moved(lib, tmp_path):
     assert (lib.pdfs_dir / f"{result.citekey}.pdf").read_bytes() == zotero.read_bytes()
     [again] = run(lib, FakeServices(), paths=[zotero])
     assert again.outcome == "duplicate" and zotero.is_file()
+
+
+@pytest.mark.parametrize(
+    ("text", "year"),
+    [
+        ("Revista Ingeniería ISSN: 2007-3615 Vol. 19, núm. 3, 2018 pp. 1-12", 2018),
+        ("Data for 1990-2010. Received 12 March 2017; accepted 5 January 2018", 2018),
+        ("Periodo 1995 a 2005. © 2016 Elsevier Ltd. All rights reserved.", 2016),
+        ("Tel. +52 55 5622 2019, correo x@unam.mx. Estudio realizado en 2015", 2015),
+        ("ISBN 978-607-02-1234-5 Ciudad de México, 2014", 2014),
+        ("doi: 10.1016/j.enbuild.2019.05.001 Energy and Buildings", None),
+        ("Tesis 2020 presentada en marzo de 2021", 2021),
+        ("Datos de 2010 y de 2012", 2010),
+        ("Sin años aquí", None),
+    ],
+)
+def test_publication_year(text, year):
+    assert publication_year(text, TODAY) == year
 
 
 def test_forced_doi(lib):
